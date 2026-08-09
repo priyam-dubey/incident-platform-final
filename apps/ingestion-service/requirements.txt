@@ -1,0 +1,10 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+pydantic==2.9.2
+pydantic-settings==2.5.2
+aiokafka==0.11.0
+clickhouse-connect==0.8.3
+prometheus-client==0.21.1
+# Local path, resolved relative to this file - not a file:// URI (those
+# require an absolute path and don't play well with relative repo layouts).
+../../packages/schemas
