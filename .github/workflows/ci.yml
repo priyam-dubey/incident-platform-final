@@ -1,0 +1,164 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  schemas:
+    name: Shared schemas (packages/schemas)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        working-directory: packages/schemas
+        run: pip install -e ".[dev]"
+      - name: Test
+        working-directory: packages/schemas
+        run: pytest -v
+
+  db-migrations:
+    name: DB migration runner (packages/db)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: incident_app
+          POSTGRES_PASSWORD: incident_app_dev_password
+          POSTGRES_DB: incident_platform
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U incident_app"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        working-directory: packages/db
+        run: pip install -r requirements-dev.txt
+      - name: Unit tests (checksum/discovery logic, no live DB required)
+        working-directory: packages/db
+        run: pytest -v
+      - name: Apply migrations against real Postgres
+        working-directory: packages/db/src
+        env:
+          DATABASE_URL: postgresql://incident_app:incident_app_dev_password@localhost:5432/incident_platform
+        run: python migrate.py up
+      - name: Verify idempotent re-run is a no-op
+        working-directory: packages/db/src
+        env:
+          DATABASE_URL: postgresql://incident_app:incident_app_dev_password@localhost:5432/incident_platform
+        run: python migrate.py up
+
+  redaction:
+    name: Redaction package (packages/redaction)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        working-directory: packages/redaction
+        run: pip install -e ".[dev]"
+      - name: Test
+        working-directory: packages/redaction
+        run: pytest -v
+
+  ingestion-service:
+    name: Ingestion service (apps/ingestion-service)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        working-directory: apps/ingestion-service
+        run: pip install -r requirements-dev.txt
+      - name: Test
+        working-directory: apps/ingestion-service
+        run: pytest -v
+
+  correlation-engine:
+    name: Correlation engine (apps/correlation-engine)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        working-directory: apps/correlation-engine
+        run: pip install -r requirements-dev.txt
+      - name: Test
+        working-directory: apps/correlation-engine
+        run: pytest -v
+
+  reasoning-service:
+    name: Reasoning service (apps/reasoning-service)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        working-directory: apps/reasoning-service
+        run: pip install -r requirements-dev.txt
+      - name: Test
+        working-directory: apps/reasoning-service
+        run: pytest -v
+
+  alert-router:
+    name: Alert router (apps/alert-router)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        working-directory: apps/alert-router
+        run: pip install -r requirements-dev.txt
+      - name: Test
+        working-directory: apps/alert-router
+        run: pytest -v
+
+  dashboard:
+    name: Dashboard (apps/dashboard)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install
+        working-directory: apps/dashboard
+        run: npm install
+      - name: Typecheck
+        working-directory: apps/dashboard
+        run: npx tsc --noEmit
+      - name: Build
+        working-directory: apps/dashboard
+        run: npm run build
+
+  sql-lint:
+    name: SQL lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install sqlfluff==3.2.5
+      - run: sqlfluff lint packages/db/migrations --dialect postgres

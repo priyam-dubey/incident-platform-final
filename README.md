@@ -23,7 +23,7 @@ Telemetry (logs/metrics/traces)
         │
         ▼  Kafka topic: incident.candidates
         │
- Reasoning Service (LangGraph + Anthropic SDK, tool-forced structured output)
+ Reasoning Service (LangGraph + Gemini SDK, schema-constrained structured output)
         │  hypothesis generation → citation validation → retry-once-on-hallucination
         ▼
  Alert Router
@@ -84,7 +84,7 @@ See each service's own README for details specific to it.
 ## Testing philosophy, consistently applied across every service
 
 Every service that talks to real infrastructure (Postgres, Kafka, ClickHouse,
-Slack/PagerDuty, the Anthropic API) defines that dependency behind a small
+Slack/PagerDuty, the Gemini API) defines that dependency behind a small
 `Protocol` interface. Production code gets the real implementation; tests get
 an in-memory fake implementing the same interface, injected through a
 `create_app(..._factory=...)` pattern so the *actual* FastAPI lifespan runs in
@@ -143,7 +143,7 @@ Each phase was built fully functional, tested, and documented before the next be
 ## What's honestly still missing for a real production deployment
 
 This was built end-to-end in a sandboxed environment without a live Docker
-daemon, live cloud infrastructure, or an Anthropic API key to call. Every
+daemon, live cloud infrastructure, or a Gemini API key to call. Every
 piece of logic that could be verified without those things was — real
 `pytest` runs, a real `npm run build`, real SQL linting against Postgres
 syntax. What was **not** verified end-to-end: an actual `docker compose up`

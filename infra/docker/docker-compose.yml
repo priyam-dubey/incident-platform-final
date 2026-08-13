@@ -1,0 +1,203 @@
+name: incident-platform
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: incident-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-incident_app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-incident_app_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-incident_platform}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-incident_app}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: incident-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Redpanda is a Kafka-API-compatible broker with no ZooKeeper/JVM overhead -
+  # drop-in for Kafka locally, same producer/consumer clients work against it.
+  redpanda:
+    image: redpandadata/redpanda:v24.1.9
+    container_name: incident-redpanda
+    restart: unless-stopped
+    command:
+      - redpanda start
+      - --smp 1
+      - --memory 512M
+      - --overprovisioned
+      - --node-id 0
+      - --check=false
+      - --kafka-addr PLAINTEXT://0.0.0.0:29092,OUTSIDE://0.0.0.0:9092
+      - --advertise-kafka-addr PLAINTEXT://redpanda:29092,OUTSIDE://localhost:9092
+      - --pandaproxy-addr 0.0.0.0:8082
+      - --advertise-pandaproxy-addr localhost:8082
+    ports:
+      - "${KAFKA_PORT:-9092}:9092"
+      - "${REDPANDA_ADMIN_PORT:-9644}:9644"
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy:.*true'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3-alpine
+    container_name: incident-clickhouse
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-incident_app}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-incident_app_dev_password}
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-incident_telemetry}
+    ports:
+      - "${CLICKHOUSE_HTTP_PORT:-8123}:8123"
+      - "${CLICKHOUSE_NATIVE_PORT:-9000}:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./clickhouse/config.d/listen.xml:/etc/clickhouse-server/config.d/listen.xml:ro
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:8123/ping || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  ingestion-service:
+    build:
+      context: ../..
+      dockerfile: apps/ingestion-service/Dockerfile
+    container_name: incident-ingestion-service
+    restart: unless-stopped
+    env_file:
+      - ../../.env
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:29092
+      CLICKHOUSE_URL: http://clickhouse:8123
+    ports:
+      - "${INGESTION_SERVICE_PORT:-8001}:8001"
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/healthz')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  correlation-engine:
+    build:
+      context: ../..
+      dockerfile: apps/correlation-engine/Dockerfile
+    container_name: incident-correlation-engine
+    restart: unless-stopped
+    env_file:
+      - ../../.env
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:29092
+      DATABASE_URL: postgresql://${POSTGRES_USER:-incident_app}:${POSTGRES_PASSWORD:-incident_app_dev_password}@postgres:5432/${POSTGRES_DB:-incident_platform}
+    ports:
+      - "${CORRELATION_SERVICE_PORT:-8002}:8002"
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/healthz')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  reasoning-service:
+    build:
+      context: ../..
+      dockerfile: apps/reasoning-service/Dockerfile
+    container_name: incident-reasoning-service
+    restart: unless-stopped
+    env_file:
+      - ../../.env
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:29092
+      DATABASE_URL: postgresql://${POSTGRES_USER:-incident_app}:${POSTGRES_PASSWORD:-incident_app_dev_password}@postgres:5432/${POSTGRES_DB:-incident_platform}
+    ports:
+      - "${REASONING_SERVICE_PORT:-8003}:8003"
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8003/healthz')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  alert-router:
+    build:
+      context: ../..
+      dockerfile: apps/alert-router/Dockerfile
+    container_name: incident-alert-router
+    restart: unless-stopped
+    env_file:
+      - ../../.env
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:29092
+      DATABASE_URL: postgresql://${POSTGRES_USER:-incident_app}:${POSTGRES_PASSWORD:-incident_app_dev_password}@postgres:5432/${POSTGRES_DB:-incident_platform}
+    ports:
+      - "${ALERT_ROUTER_PORT:-8004}:8004"
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8004/healthz')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  dashboard:
+    build:
+      context: ../..
+      dockerfile: apps/dashboard/Dockerfile
+    container_name: incident-dashboard
+    restart: unless-stopped
+    environment:
+      ALERT_ROUTER_URL: http://alert-router:8004
+      ALERT_ROUTER_API_KEY: ${ALERT_ROUTER_API_KEY:-dev-local-dashboard-key}
+    ports:
+      - "${DASHBOARD_PORT:-3000}:3000"
+    depends_on:
+      alert-router:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:
+  redpanda_data:
+  clickhouse_data:
