@@ -1,8 +1,23 @@
 # AI-Native Observability & Incident Intelligence Platform
 
-Production-grade platform that combines deterministic telemetry correlation with
-constrained AI reasoning to identify, explain, and document production incidents
-— without hallucinating root causes.
+**Author:** Priyambad Dubey ([priyambaddubey2004@gmail.com](mailto:priyambaddubey2004@gmail.com))
+
+A system that watches everything happening across a company's servers, notices when something looks wrong, and tries to explain *why* — automatically — before a human even opens their laptop.
+
+It combines deterministic telemetry correlation (real statistics, no AI) with constrained AI reasoning (an LLM that is never allowed to hallucinate a root cause) to detect, explain, and document production incidents.
+
+> 🟡 **Status:** Actively being wired up for a live deployment (free tier) in the next few days. Until then, run it locally — instructions below.
+
+---
+
+## What this can actually help with
+
+- **On-call engineers** who are tired of opening five dashboards to figure out why something broke.
+- **Small teams without a dedicated SRE org** who want incident intelligence without buying an enterprise observability platform.
+- **Anyone learning how production AI systems are built properly** — this repo is a real, working reference for patterns like citation-grounded LLM output, event-driven microservices, and human-in-the-loop review, not a toy demo.
+- **Contributors who want to practice building real infra** — Kafka, ClickHouse, Postgres, LangGraph, and a proper Next.js frontend, all wired together and tested.
+
+---
 
 ## Architecture
 
@@ -23,7 +38,7 @@ Telemetry (logs/metrics/traces)
         │
         ▼  Kafka topic: incident.candidates
         │
- Reasoning Service (LangGraph + Gemini SDK, schema-constrained structured output)
+ Reasoning Service (LangGraph + LLM, schema-constrained structured output)
         │  hypothesis generation → citation validation → retry-once-on-hallucination
         ▼
  Alert Router
@@ -36,39 +51,59 @@ Telemetry (logs/metrics/traces)
  Published Incident + Postmortem
 ```
 
-The one rule every phase enforces: **the model never sees raw telemetry.**
-Only the correlation engine's bounded, redacted `IncidentCandidate` evidence
-ever reaches the reasoning service, and every claim the model makes is
-programmatically checked against that evidence before a human ever sees it.
+**The one rule every phase enforces: the model never sees raw telemetry.** Only the correlation engine's bounded, redacted `IncidentCandidate` evidence ever reaches the reasoning service, and every claim the model makes is programmatically checked against that evidence before a human ever sees it. If a claim can't be backed up, it gets retried once, and if it still can't be grounded, it's dropped rather than shown as fact.
+
+---
 
 ## Repo layout
 
 ```
 incident-platform/
 ├── apps/
-│   ├── ingestion-service/     # Phase 2 - telemetry intake, Kafka+ClickHouse fan-out
-│   ├── correlation-engine/    # Phase 3 - anomaly detection, clustering, redaction
-│   ├── reasoning-service/     # Phase 4 - LangGraph reasoning, citation validation
-│   ├── alert-router/          # Phase 5 - escalation, human review API
-│   └── dashboard/             # Phase 6 - Next.js frontend
+│   ├── ingestion-service/     # telemetry intake, Kafka+ClickHouse fan-out
+│   ├── correlation-engine/    # anomaly detection, clustering, redaction
+│   ├── reasoning-service/     # LangGraph reasoning, citation validation
+│   ├── alert-router/          # escalation, human review API
+│   └── dashboard/             # Next.js frontend
 ├── packages/
 │   ├── db/                    # SQL schema + migrations (shared source of truth)
 │   ├── schemas/                # Shared Pydantic contracts for cross-service data
-│   └── redaction/               # Phase 7 - PII/secret scrubbing, used by correlation-engine
+│   └── redaction/               # PII/secret scrubbing, used by correlation-engine
 ├── infra/
 │   └── docker/                 # docker-compose stack: postgres, redpanda, redis, clickhouse, all 5 apps
+├── render.yaml                 # deployment config for Render's free tier
 └── .github/workflows/          # CI - one job per package/app, all independently testable
 ```
 
-## Local development
+---
+
+## Tech stack
+
+| Layer | Tech |
+|---|---|
+| Ingestion / Correlation / Reasoning / Alerts | Python, FastAPI, Pydantic |
+| AI orchestration | LangGraph, LLM API (schema-constrained structured output) |
+| Event bus | Kafka-compatible (Redpanda) |
+| Telemetry storage | ClickHouse |
+| System of record | PostgreSQL |
+| Cache / rate limiting | Redis |
+| Frontend | Next.js, TypeScript, Tailwind |
+| Observability | Prometheus metrics, structured JSON logging |
+| Testing | pytest, TypeScript `tsc` + `next build` |
+
+---
+
+## Running it locally
 
 Requires Docker + Docker Compose, Python 3.12+, Node 20+.
 
 ```bash
-cp .env.example .env
-make infra-up          # postgres, redpanda, redis, clickhouse, and all 5 application services
-make migrate            # apply DB schema
-make test-all             # run every Python service's test suite
+git clone https://github.com/priyam-dubey/incident-platform-final.git
+cd incident-platform-final
+cp .env.example .env        # fill in your LLM API key before starting the reasoning service
+make infra-up                # postgres, redpanda, redis, clickhouse, and all 5 application services
+make migrate                   # apply DB schema
+make test-all                    # run every Python service's test suite
 ```
 
 Or run a single service against the infra stack without rebuilding its container:
@@ -79,74 +114,143 @@ cd apps/ingestion-service && pip install -r requirements-dev.txt && pytest -v
 make run-ingestion
 ```
 
-See each service's own README for details specific to it.
+For the dashboard:
 
-## Testing philosophy, consistently applied across every service
+```bash
+cd apps/dashboard
+cp .env.local.example .env.local
+npm install
+npm run dev
+```
 
-Every service that talks to real infrastructure (Postgres, Kafka, ClickHouse,
-Slack/PagerDuty, the Gemini API) defines that dependency behind a small
-`Protocol` interface. Production code gets the real implementation; tests get
-an in-memory fake implementing the same interface, injected through a
-`create_app(..._factory=...)` pattern so the *actual* FastAPI lifespan runs in
-tests — not a bypassed one. This caught two real bugs during development
-(documented in the relevant service READMEs): a `TestClient` that would have
-dialed live Kafka/ClickHouse in ingestion-service and alert-router before the
-factory pattern was introduced. Pure logic (anomaly detection, clustering,
-citation validation, redaction, escalation policy) is tested directly, with
-zero infrastructure involved at all.
+Then open **http://localhost:3000**.
 
-Total test count across the platform's Python services: **127 tests**, all
-passing, all real (no skipped/xfail placeholders), runnable with
-`make test-all` without Docker. The dashboard (TypeScript) is verified via
-`tsc --noEmit` and a real `next build` rather than a unit-test count.
+**On Windows?** Use WSL2 — Docker Desktop already runs on it, and every command above works unmodified inside a WSL Ubuntu terminal. Native PowerShell works too, but `make` isn't available by default; run the underlying `docker compose` / `pytest` / `uvicorn` commands directly instead (see each service's own README).
 
-## Observability
+---
 
-Every Python service exposes `/healthz` and `/metrics` (Prometheus format).
-Structured JSON logging throughout (`app/logging_config.py`, identical pattern
-in every service) so logs are queryable without a regex parser in front of
-them. Domain-specific counters, not just HTTP metrics — e.g.
-`events_publish_failures_total{sink="kafka"}` in ingestion,
-`hypotheses_rejected_total` in the reasoning service (a rising hallucination
-rate is the earliest signal a prompt/model change degraded citation grounding,
-well before human review data would catch it), `verdicts_submitted_total` in
-the alert router.
+## How to test it
 
-## Security posture, stated plainly rather than glossed over
+**Automated tests (what actually proves the code works):**
 
-- **Machine-to-machine auth**: constant-time API key checks (ingestion, alert
-  router). Documented as sufficient for this stage, not as a finished
-  security story.
-- **Human auth**: does not exist yet. The dashboard has no session/login
-  layer — see `apps/dashboard/README.md` for exactly what's cut and why it's
-  called out explicitly instead of faked.
-- **PII/secrets**: redacted (`packages/redaction`) before telemetry evidence
-  is buffered for the reasoning service or shown to a human — not after.
-- **Multi-tenant isolation**: enforced at the schema level
-  (`workspace_id` on every table) but not yet at the query-authorization
-  level (nothing currently stops an authenticated caller from requesting a
-  different workspace's data by id) — the next real hardening step before
-  this could take multiple customers.
+```bash
+make test-all
+```
 
-## Phase history
+This runs the full test suite across every Python service — anomaly detection math, citation validation logic, retry-on-hallucination behavior, verdict/escalation workflows, redaction correctness — no Docker or live API key required. 127 tests, all real, all passing.
 
-- [x] **Phase 1** — Monorepo scaffold, infra stack, DB schema/migrations, shared schemas
-- [x] **Phase 2** — Ingestion service (telemetry intake, Kafka + ClickHouse fan-out, auth, rate limiting, Prometheus metrics)
-- [x] **Phase 3** — Correlation engine (anomaly detection, cross-service clustering, incident candidates, Prometheus metrics)
-- [x] **Phase 4** — Reasoning service (LangGraph, tool-forced structured output, citation validation, retry-on-hallucination, Prometheus metrics)
-- [x] **Phase 5** — Alert router / human review (escalation dispatcher with retry/backoff, verdict API, eval-dataset feed, Prometheus metrics)
-- [x] **Phase 6** — Dashboard (Next.js, evidence-linked confidence readouts, verdict controls)
-- [x] **Phase 7** — Redaction (PII/secrets scrubbed before evidence buffering), Prometheus observability across all services, documented security posture
+For the dashboard:
 
-Each phase was built fully functional, tested, and documented before the next began.
+```bash
+cd apps/dashboard
+npm install
+npx tsc --noEmit
+npm run build
+```
 
-## What's honestly still missing for a real production deployment
+**Manually poking at a running instance:**
 
-This was built end-to-end in a sandboxed environment without a live Docker
-daemon, live cloud infrastructure, or a Gemini API key to call. Every
-piece of logic that could be verified without those things was — real
-`pytest` runs, a real `npm run build`, real SQL linting against Postgres
-syntax. What was **not** verified end-to-end: an actual `docker compose up`
-of the full stack, a live LLM call against `root_cause_v1`'s prompt, and a
-live Slack/PagerDuty webhook delivery. These are the concrete next steps
-before calling this deployed rather than built.
+```bash
+# health checks
+curl http://localhost:8001/healthz   # ingestion
+curl http://localhost:8002/healthz   # correlation
+curl http://localhost:8003/healthz   # reasoning
+curl http://localhost:8004/healthz   # alert router
+
+# send a fake error spike and watch it get picked up
+curl -X POST http://localhost:8001/v1/telemetry \
+  -H "Content-Type: application/json" \
+  -H "X-Ingestion-Key: dev-local-ingestion-key" \
+  -d '{
+    "idempotency_key": "test-batch-1",
+    "events": [{
+      "kind": "metric",
+      "workspace_id": "11111111-1111-1111-1111-111111111111",
+      "service_name": "checkout-api",
+      "timestamp": "2026-01-01T10:00:00Z",
+      "metric_name": "error_rate",
+      "value": 0.9
+    }]
+  }'
+```
+
+Send enough of these (varying the value) to build a baseline, then send an obvious spike — within one correlation window, an incident candidate should appear in Postgres and get picked up by the reasoning service.
+
+## How a user will test it from the live site (once deployed)
+
+Once the free-tier deployment is live, the loop will be:
+
+1. Open the dashboard URL and enter the demo workspace ID (shown on the homepage).
+2. Browse the incident feed — pre-seeded demo incidents will be there to look at without needing to send your own telemetry.
+3. Click into an incident to see the evidence trail and the AI's root-cause hypothesis, with clickable citation numbers linking straight to the evidence backing each claim.
+4. Try Accept / Reject / Edit on a hypothesis and watch the incident status change.
+
+The live URL and demo workspace ID will be added here as soon as deployment is confirmed working.
+
+---
+
+## Contributing — PRs welcome!
+
+This is open source and genuinely open to contributions, big or small. Ways to help:
+
+- Try running it locally and open an issue for anything that breaks or is unclear.
+- Pick up anything in **Future Scope** below.
+- Improve test coverage, docs, or the dashboard's UI/UX.
+- Add a new anomaly-detection strategy, a new alert channel, or a new evidence source type.
+
+**To contribute:**
+
+```bash
+# 1. Fork the repo, then:
+git clone https://github.com/<your-username>/incident-platform-final.git
+cd incident-platform-final
+git checkout -b your-feature-name
+
+# 2. Make your changes, run tests
+make test-all
+
+# 3. Commit, push, and open a PR
+git push origin your-feature-name
+```
+
+Keep PRs focused (one thing at a time), add/update tests for anything you change, and explain the *why* in your PR description, not just the *what*. No formal CLA — just be reasonable and this'll be fast to review.
+
+Found a bug, have an idea, or just want to say hi? Open an issue or email priyambaddubey2004@gmail.com.
+
+---
+
+## Future scope
+
+- [ ] **Live deployment on Render's free tier** — `render.yaml` is already in the repo, deployment in progress.
+- [ ] **Real authentication** — the dashboard currently has no login/session system; this is the top hardening priority before any real usage.
+- [ ] **Query-level multi-tenant isolation** — workspace_id exists on every table, but nothing yet stops an authenticated caller from requesting another workspace's data by ID.
+- [ ] **Offline evaluation harness** — every human accept/reject/edit is already saved as labeled data (`eval_examples`); the next step is a proper harness that replays this against prompt/model changes to catch regressions before they ship.
+- [ ] **Fine-tuned re-ranking / embeddings** for evidence relevance scoring.
+- [ ] **More alert channels** beyond Slack/PagerDuty (Discord, email, Teams).
+- [ ] **A public demo mode** with pre-seeded synthetic incidents so anyone can explore the dashboard without standing up the full stack.
+- [ ] **Kubernetes manifests** for a real production deployment beyond Docker Compose.
+- [ ] **Cost/latency dashboards** for LLM usage (tokens, cost-per-incident, retry rate).
+
+---
+
+## Honest current limitations
+
+This was built and tested piece-by-piece (127 passing tests, a real `next build`, real SQL syntax checks) but has **not yet been run as a full live stack end-to-end** — that's what the upcoming deployment will confirm. Known gaps right now:
+
+- No dashboard authentication.
+- No live LLM call has been verified yet in the deployed environment (works in tests against a mocked client).
+- No live Slack/PagerDuty delivery confirmed yet.
+
+These are listed here on purpose, not hidden — if you hit one of them, that's expected, not a mystery bug.
+
+---
+
+## License
+
+Open source. (Add your preferred license here — e.g. MIT — if not already present in the repo.)
+
+## Maintainer
+
+**Priyambad Dubey**
+📧 priyambaddubey2004@gmail.com
+🔗 [github.com/priyam-dubey](https://github.com/priyam-dubey)
