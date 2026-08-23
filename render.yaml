@@ -1,0 +1,154 @@
+# Render Blueprint — deploys all 5 services from this monorepo in one go.
+#
+# Usage: push this file to your repo root, then in Render's dashboard choose
+# "New +" -> "Blueprint" and point it at this repo. Render reads this file
+# and creates every service below automatically instead of you configuring
+# each one by hand.
+#
+# All services are on the FREE plan (see the deep-dive report's Section on
+# Render's free-tier limits: no background workers on free, and free web
+# services sleep after 15 min idle — this is why every service below is a
+# `web` service with a real HTTP endpoint, and why you need an external
+# keep-alive pinger hitting each /healthz on a ~10 minute interval to keep
+# the three Kafka-consumer services from sleeping between incidents).
+#
+# Secrets (sync: false) are NOT set here — Render will prompt you to enter
+# them in the dashboard the first time you deploy. Never put real secrets
+# in this file or commit them to git.
+
+services:
+  - type: web
+    name: incident-ingestion-service
+    runtime: docker
+    dockerfilePath: ./apps/ingestion-service/Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /healthz
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: KAFKA_BOOTSTRAP_SERVERS
+        sync: false
+      - key: KAFKA_SECURITY_PROTOCOL
+        value: SASL_SSL
+      - key: KAFKA_SASL_MECHANISM
+        sync: false
+      - key: KAFKA_SASL_USERNAME
+        sync: false
+      - key: KAFKA_SASL_PASSWORD
+        sync: false
+      - key: KAFKA_TOPIC_TELEMETRY_EVENTS
+        value: telemetry.events
+      - key: CLICKHOUSE_ENABLED
+        value: "true"
+      - key: CLICKHOUSE_URL
+        sync: false
+      - key: CLICKHOUSE_USER
+        sync: false
+      - key: CLICKHOUSE_PASSWORD
+        sync: false
+      - key: CLICKHOUSE_DB
+        sync: false
+      - key: INGESTION_VALID_API_KEYS
+        sync: false
+      - key: ENVIRONMENT
+        value: production
+
+  - type: web
+    name: incident-correlation-engine
+    runtime: docker
+    dockerfilePath: ./apps/correlation-engine/Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /healthz
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: KAFKA_BOOTSTRAP_SERVERS
+        sync: false
+      - key: KAFKA_SECURITY_PROTOCOL
+        value: SASL_SSL
+      - key: KAFKA_SASL_MECHANISM
+        sync: false
+      - key: KAFKA_SASL_USERNAME
+        sync: false
+      - key: KAFKA_SASL_PASSWORD
+        sync: false
+      - key: KAFKA_TOPIC_TELEMETRY_EVENTS
+        value: telemetry.events
+      - key: KAFKA_TOPIC_INCIDENT_CANDIDATES
+        value: incident.candidates
+      - key: ENVIRONMENT
+        value: production
+
+  - type: web
+    name: incident-reasoning-service
+    runtime: docker
+    dockerfilePath: ./apps/reasoning-service/Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /healthz
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: KAFKA_BOOTSTRAP_SERVERS
+        sync: false
+      - key: KAFKA_SECURITY_PROTOCOL
+        value: SASL_SSL
+      - key: KAFKA_SASL_MECHANISM
+        sync: false
+      - key: KAFKA_SASL_USERNAME
+        sync: false
+      - key: KAFKA_SASL_PASSWORD
+        sync: false
+      - key: KAFKA_TOPIC_INCIDENT_CANDIDATES
+        value: incident.candidates
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: REASONING_MODEL_SYNTHESIS
+        value: gemini-2.5-flash
+      - key: ENVIRONMENT
+        value: production
+
+  - type: web
+    name: incident-alert-router
+    runtime: docker
+    dockerfilePath: ./apps/alert-router/Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /healthz
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: KAFKA_BOOTSTRAP_SERVERS
+        sync: false
+      - key: KAFKA_SECURITY_PROTOCOL
+        value: SASL_SSL
+      - key: KAFKA_SASL_MECHANISM
+        sync: false
+      - key: KAFKA_SASL_USERNAME
+        sync: false
+      - key: KAFKA_SASL_PASSWORD
+        sync: false
+      - key: KAFKA_TOPIC_INCIDENT_CANDIDATES
+        value: incident.candidates
+      - key: SLACK_WEBHOOK_URL
+        sync: false
+      - key: PAGERDUTY_ROUTING_KEY
+        sync: false
+      - key: VALID_API_KEYS_RAW
+        sync: false
+      - key: ENVIRONMENT
+        value: production
+
+  - type: web
+    name: incident-dashboard
+    runtime: docker
+    dockerfilePath: ./apps/dashboard/Dockerfile
+    dockerContext: .
+    plan: free
+    envVars:
+      - key: ALERT_ROUTER_URL
+        sync: false
+      - key: ALERT_ROUTER_API_KEY
+        sync: false

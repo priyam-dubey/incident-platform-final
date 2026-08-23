@@ -16,6 +16,21 @@ class Settings(BaseSettings):
     kafka_topic_incident_candidates: str = "incident.candidates"
     kafka_consumer_group_reasoning: str = "reasoning-service"
 
+    # --- kafka auth (optional - only needed for managed/cloud Kafka) ---
+    kafka_security_protocol: str = "PLAINTEXT"
+    kafka_sasl_mechanism: str | None = None
+    kafka_sasl_username: str | None = None
+    kafka_sasl_password: str | None = None
+
+    @property
+    def kafka_client_kwargs(self) -> dict:
+        kwargs: dict = {"security_protocol": self.kafka_security_protocol}
+        if self.kafka_security_protocol != "PLAINTEXT":
+            kwargs["sasl_mechanism"] = self.kafka_sasl_mechanism or "PLAIN"
+            kwargs["sasl_plain_username"] = self.kafka_sasl_username
+            kwargs["sasl_plain_password"] = self.kafka_sasl_password
+        return kwargs
+
     database_url: str = (
         "postgresql://incident_app:incident_app_dev_password@localhost:5432/incident_platform"
     )

@@ -32,10 +32,17 @@ class IncidentCandidateSink(Protocol):
 
 
 class PostgresAndKafkaIncidentSink:
-    def __init__(self, database_url: str, kafka_bootstrap_servers: str, kafka_topic: str) -> None:
+    def __init__(
+        self,
+        database_url: str,
+        kafka_bootstrap_servers: str,
+        kafka_topic: str,
+        kafka_client_kwargs: dict | None = None,
+    ) -> None:
         self._database_url = database_url
         self._kafka_bootstrap_servers = kafka_bootstrap_servers
         self._kafka_topic = kafka_topic
+        self._kafka_client_kwargs = kafka_client_kwargs or {}
         self._conn: psycopg.Connection | None = None
         self._producer: AIOKafkaProducer | None = None
 
@@ -49,6 +56,7 @@ class PostgresAndKafkaIncidentSink:
             value_serializer=lambda v: json.dumps(v, default=str).encode("utf-8"),
             key_serializer=lambda k: k.encode("utf-8") if k else None,
             enable_idempotence=True,
+            **self._kafka_client_kwargs,
         )
         await self._producer.start()
 

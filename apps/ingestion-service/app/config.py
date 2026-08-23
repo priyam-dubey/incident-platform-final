@@ -30,7 +30,36 @@ class Settings(BaseSettings):
     kafka_producer_acks: str = "all"  # wait for full ISR ack - correctness over latency here
     kafka_producer_linger_ms: int = 20  # small batching window, real throughput win at low cost
 
+    # --- kafka auth (optional - only needed for managed/cloud Kafka) ---
+    # Defaults preserve plaintext local Redpanda behavior untouched. Set
+    # KAFKA_SECURITY_PROTOCOL=SASL_SSL (+ mechanism/username/password) when
+    # pointing at a managed provider like Upstash Kafka or Redpanda Cloud.
+    kafka_security_protocol: str = "PLAINTEXT"
+    kafka_sasl_mechanism: str | None = None
+    kafka_sasl_username: str | None = None
+    kafka_sasl_password: str | None = None
+
+    @property
+    def kafka_client_kwargs(self) -> dict:
+        """Extra kwargs to splat into AIOKafkaProducer/AIOKafkaConsumer.
+
+        PLAINTEXT (the local default) omits SASL kwargs entirely, since
+        aiokafka rejects sasl_mechanism=None combined with certain brokers'
+        strict handshake checks. Only added when actually configured.
+        """
+        kwargs: dict = {"security_protocol": self.kafka_security_protocol}
+        if self.kafka_security_protocol != "PLAINTEXT":
+            kwargs["sasl_mechanism"] = self.kafka_sasl_mechanism or "PLAIN"
+            kwargs["sasl_plain_username"] = self.kafka_sasl_username
+            kwargs["sasl_plain_password"] = self.kafka_sasl_password
+        return kwargs
+
     # --- clickhouse ---
+    # Set to false to run without ClickHouse (e.g. no cloud deployment for
+    # it yet, or local resource constraints). Telemetry still reaches Kafka/
+    # correlation-engine either way - only the raw-telemetry durable store
+    # is skipped, and nothing else in the platform reads from it today.
+    clickhouse_enabled: bool = True
     clickhouse_url: str = "http://localhost:8123"
     clickhouse_user: str = "incident_app"
     clickhouse_password: str = "incident_app_dev_password"

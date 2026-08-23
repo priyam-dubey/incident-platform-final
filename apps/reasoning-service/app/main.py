@@ -115,6 +115,7 @@ async def lifespan(app: FastAPI):
         group_id=settings.kafka_consumer_group_reasoning,
         enable_auto_commit=True,
         auto_offset_reset="latest",
+        **settings.kafka_client_kwargs,
     )
     await consumer.start()
 

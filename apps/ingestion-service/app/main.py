@@ -21,7 +21,7 @@ from typing import Callable
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
-from app.clickhouse_writer import ClickHouseTelemetryWriter, TelemetryWriter
+from app.clickhouse_writer import ClickHouseTelemetryWriter, NullTelemetryWriter, TelemetryWriter
 from app.config import Settings, get_settings
 from app.kafka_producer import EventPublisher, KafkaEventPublisher
 from app.logging_config import configure_logging
@@ -40,10 +40,13 @@ def _default_event_publisher(settings: Settings) -> EventPublisher:
         bootstrap_servers=settings.kafka_bootstrap_servers,
         acks=settings.kafka_producer_acks,
         linger_ms=settings.kafka_producer_linger_ms,
+        client_kwargs=settings.kafka_client_kwargs,
     )
 
 
 def _default_telemetry_writer(settings: Settings) -> TelemetryWriter:
+    if not settings.clickhouse_enabled:
+        return NullTelemetryWriter()
     return ClickHouseTelemetryWriter(
         url=settings.clickhouse_url,
         username=settings.clickhouse_user,

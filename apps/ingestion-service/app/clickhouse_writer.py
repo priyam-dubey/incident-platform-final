@@ -102,6 +102,29 @@ class TelemetryWriter(Protocol):
     async def stop(self) -> None: ...
 
 
+class NullTelemetryWriter:
+    """No-op TelemetryWriter for when ClickHouse isn't deployed.
+
+    Telemetry still flows into Kafka regardless (that's what correlation-
+    engine actually consumes) - this only skips the raw-telemetry durable
+    store, which nothing downstream currently reads from. Implements the
+    same TelemetryWriter protocol as ClickHouseTelemetryWriter so main.py's
+    factory wiring and every call site is unchanged.
+    """
+
+    async def start(self) -> None:
+        logger.warning(
+            "clickhouse_disabled - raw telemetry store inactive, "
+            "events still flow to Kafka for correlation-engine"
+        )
+
+    async def stop(self) -> None:
+        pass
+
+    async def write(self, event: TelemetryEventUnion) -> None:
+        pass
+
+
 class ClickHouseTelemetryWriter:
     def __init__(
         self,
@@ -130,7 +153,12 @@ class ClickHouseTelemetryWriter:
 
         parsed = urlparse(self._url)
         host = parsed.hostname or "localhost"
-        port = parsed.port or 8123
+        # ClickHouse Cloud terminates TLS on 8443 and requires secure=True;
+        # local Docker ClickHouse uses plain HTTP on 8123. Both scheme
+        # ("https://...") and the conventional 8443 port are honored, so a
+        # CLICKHOUSE_URL of either form works without further config.
+        secure = parsed.scheme == "https" or parsed.port == 8443
+        port = parsed.port or (8443 if secure else 8123)
 
         loop = asyncio.get_running_loop()
         self._client = await loop.run_in_executor(
@@ -141,6 +169,7 @@ class ClickHouseTelemetryWriter:
                 username=self._username,
                 password=self._password,
                 database=self._database,
+                secure=secure,
             ),
         )
         await loop.run_in_executor(None, lambda: self._client.command(_CREATE_TABLE_SQL))

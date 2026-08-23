@@ -20,6 +20,21 @@ class Settings(BaseSettings):
     kafka_topic_incident_candidates: str = "incident.candidates"
     kafka_consumer_group_alerts: str = "alert-router"
 
+    # --- kafka auth (optional - only needed for managed/cloud Kafka) ---
+    kafka_security_protocol: str = "PLAINTEXT"
+    kafka_sasl_mechanism: str | None = None
+    kafka_sasl_username: str | None = None
+    kafka_sasl_password: str | None = None
+
+    @property
+    def kafka_client_kwargs(self) -> dict:
+        kwargs: dict = {"security_protocol": self.kafka_security_protocol}
+        if self.kafka_security_protocol != "PLAINTEXT":
+            kwargs["sasl_mechanism"] = self.kafka_sasl_mechanism or "PLAIN"
+            kwargs["sasl_plain_username"] = self.kafka_sasl_username
+            kwargs["sasl_plain_password"] = self.kafka_sasl_password
+        return kwargs
+
     slack_webhook_url: str = ""
     pagerduty_routing_key: str = ""
     alert_max_attempts: int = 3

@@ -39,10 +39,17 @@ class EventPublisher(Protocol):
 
 
 class KafkaEventPublisher:
-    def __init__(self, bootstrap_servers: str, acks: str = "all", linger_ms: int = 20) -> None:
+    def __init__(
+        self,
+        bootstrap_servers: str,
+        acks: str = "all",
+        linger_ms: int = 20,
+        client_kwargs: dict | None = None,
+    ) -> None:
         self._bootstrap_servers = bootstrap_servers
         self._acks = acks
         self._linger_ms = linger_ms
+        self._client_kwargs = client_kwargs or {}
         self._producer: AIOKafkaProducer | None = None
 
     async def start(self) -> None:
@@ -53,6 +60,7 @@ class KafkaEventPublisher:
             value_serializer=lambda v: json.dumps(v, default=str).encode("utf-8"),
             key_serializer=lambda k: k.encode("utf-8") if k else None,
             enable_idempotence=True,  # producer-level exactly-once against broker retries
+            **self._client_kwargs,
         )
         await self._producer.start()
         logger.info("kafka_producer_started", extra={"bootstrap_servers": self._bootstrap_servers})

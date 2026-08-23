@@ -133,6 +133,7 @@ def _build_lifespan(repository_factory: RepositoryFactory, enable_escalation_con
                 group_id=settings.kafka_consumer_group_alerts,
                 enable_auto_commit=True,
                 auto_offset_reset="latest",
+                **settings.kafka_client_kwargs,
             )
             await consumer.start()
             consume_task = asyncio.create_task(_escalation_consume_loop(consumer, dispatcher))

@@ -91,6 +91,7 @@ async def lifespan(app: FastAPI):
         database_url=settings.database_url,
         kafka_bootstrap_servers=settings.kafka_bootstrap_servers,
         kafka_topic=settings.kafka_topic_incident_candidates,
+        kafka_client_kwargs=settings.kafka_client_kwargs,
     )
     await service_registry.start()
     await candidate_sink.start()
@@ -116,6 +117,7 @@ async def lifespan(app: FastAPI):
         group_id=settings.kafka_consumer_group_correlation,
         enable_auto_commit=True,
         auto_offset_reset="latest",
+        **settings.kafka_client_kwargs,
     )
     await consumer.start()
 

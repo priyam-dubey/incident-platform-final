@@ -65,6 +65,7 @@ services:
     image: clickhouse/clickhouse-server:24.3-alpine
     container_name: incident-clickhouse
     restart: unless-stopped
+    mem_limit: 1800m
     environment:
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-incident_app}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-incident_app_dev_password}
@@ -75,6 +76,7 @@ services:
     volumes:
       - clickhouse_data:/var/lib/clickhouse
       - ./clickhouse/config.d/listen.xml:/etc/clickhouse-server/config.d/listen.xml:ro
+      - ./clickhouse/config.d/memory.xml:/etc/clickhouse-server/config.d/memory.xml:ro
     ulimits:
       nofile:
         soft: 262144
@@ -102,7 +104,7 @@ services:
       redpanda:
         condition: service_healthy
       clickhouse:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/healthz')"]
       interval: 10s
