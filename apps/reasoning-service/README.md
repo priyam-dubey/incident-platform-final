@@ -53,7 +53,7 @@ generate ──►  validate_citations
 
 ## Local development
 
-Requires `GEMINI_API_KEY` set in `.env` to actually call a model - without
+Requires `LLM_API_KEY` (and `LLM_MODEL`, default `gemini/gemini-2.5-flash`) set in `.env` to actually call a model - without
 it the service starts (and passes health checks) but every candidate it
 tries to process will fail at the first LLM call, logged clearly rather than
 crashing the consumer loop.
@@ -77,7 +77,7 @@ deterministic LangGraph execution without ever calling the live API. The
 citation validator and structured-output schemas are pure logic, tested
 directly. What is **not** exercised in this sandbox: the live Gemini API
 call itself, and how the actual model behaves against `root_cause_v1`'s
-prompt - that requires `GEMINI_API_KEY` and a live run, which is the one
+prompt - that requires `LLM_API_KEY` and a live run, which is the one
 piece of this service that has to be validated outside this environment.
 
 ## Prompt versioning

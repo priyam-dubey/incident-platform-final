@@ -35,10 +35,7 @@ class Settings(BaseSettings):
         "postgresql://incident_app:incident_app_dev_password@localhost:5432/incident_platform"
     )
 
-    gemini_api_key: str = ""
-    # Gemini Flash is available on Gemini's development free tier (within its
-    # rate limits) and supports JSON-schema structured output.
-    reasoning_model_synthesis: str = "gemini-2.5-flash"
+    # Provider/model/key come from LLM_MODEL and LLM_API_KEY (packages/llm).
     reasoning_max_attempts: int = 2
     reasoning_max_tokens: int = 4096
     # Caps concurrent in-flight LLM calls so a burst of incident candidates

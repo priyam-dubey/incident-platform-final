@@ -3,6 +3,7 @@ FROM python:3.12-slim AS base
 WORKDIR /srv
 
 COPY packages/schemas /srv/packages/schemas
+COPY packages/llm /srv/packages/llm
 COPY apps/reasoning-service/requirements.txt /srv/apps/reasoning-service/requirements.txt
 
 WORKDIR /srv/apps/reasoning-service
