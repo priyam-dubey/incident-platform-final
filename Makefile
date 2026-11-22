@@ -1,4 +1,4 @@
-.PHONY: test-llm infra-up infra-down infra-logs migrate migrate-status test-db test-schemas test-redaction test-ingestion test-correlation test-reasoning test-alerts test-all run-ingestion run-correlation run-reasoning run-alerts run-dashboard
+.PHONY: test-gateway run-gateway test-llm infra-up infra-down infra-logs migrate migrate-status test-db test-schemas test-redaction test-ingestion test-correlation test-reasoning test-alerts test-all run-ingestion run-correlation run-reasoning run-alerts run-dashboard
 
 infra-up:
 	docker compose -f infra/docker/docker-compose.yml up -d
@@ -51,8 +51,14 @@ run-alerts:
 run-dashboard:
 	cd apps/dashboard && npm run dev
 
-test-all: test-llm test-db test-schemas test-redaction test-ingestion test-correlation test-reasoning test-alerts
+test-all: test-gateway test-llm test-db test-schemas test-redaction test-ingestion test-correlation test-reasoning test-alerts
 	@echo "All tests passed."
 
 test-llm:
 	cd packages/llm && pytest -v
+
+test-gateway:
+	cd apps/api-gateway && pytest -v   # set TEST_DATABASE_URL to run the integration tests
+
+run-gateway:
+	cd apps/api-gateway && uvicorn app.main:app --reload --port 8005
