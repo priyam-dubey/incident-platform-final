@@ -12,7 +12,7 @@ from app.config import get_settings
 from app.db import make_pool
 from app.rate_limit import SlidingWindowLimiter
 from app.repository import Repository
-from app.routes import applications, auth, internal, workspaces
+from app.routes import applications, auth, internal, telemetry, workspaces
 
 logger = logging.getLogger("api-gateway")
 MAX_BODY_BYTES = 1_000_000
@@ -24,6 +24,17 @@ async def lifespan(app: FastAPI):
     logging.basicConfig(level=settings.log_level.upper(), format='{"level":"%(levelname)s","logger":"%(name)s","msg":"%(message)s"}')
     if settings.environment != "development" and settings.secret_is_insecure_default:
         raise RuntimeError("AUTH_SECRET_KEY must be set to a strong random value outside development")
+    if not hasattr(app.state, "telemetry"):
+        app.state.telemetry = None
+        if settings.clickhouse_url:
+            from app.clickhouse import ClickHouseExecutor
+            try:
+                app.state.telemetry = ClickHouseExecutor(settings.clickhouse_url, settings.clickhouse_user, settings.clickhouse_password,
+                                                         settings.clickhouse_db, settings.telemetry_query_timeout_seconds)
+            except Exception:
+                logger.exception("clickhouse_connect_failed - telemetry queries will report unavailable")
+        else:
+            logger.warning("CLICKHOUSE_URL not set - telemetry queries are disabled")
     if not hasattr(app.state, "repo"):
         app.state.pool = make_pool(settings.database_url)
         app.state.repo = Repository(app.state.pool)
@@ -57,6 +68,7 @@ def create_app() -> FastAPI:
     app.include_router(auth.router)
     app.include_router(workspaces.router)
     app.include_router(applications.router)
+    app.include_router(telemetry.router)
     app.include_router(internal.router)
 
     @app.get("/healthz", tags=["ops"])
@@ -75,7 +87,8 @@ def create_app() -> FastAPI:
     @app.get("/v1/system/status", tags=["ops"])
     def system_status() -> dict:
         # Configuration status only; never secret values.
-        return {"llm": LLMClient().status(), "environment": settings.environment}
+        return {"llm": LLMClient().status(), "environment": settings.environment,
+                "telemetry_store": "configured" if app.state.telemetry is not None else "not_configured"}
 
     return app
 

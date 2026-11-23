@@ -1,6 +1,7 @@
 FROM python:3.12-slim
 WORKDIR /srv
 COPY packages/llm /srv/packages/llm
+COPY packages/schemas /srv/packages/schemas
 COPY apps/api-gateway/requirements.txt /srv/apps/api-gateway/requirements.txt
 WORKDIR /srv/apps/api-gateway
 RUN pip install --no-cache-dir -r requirements.txt

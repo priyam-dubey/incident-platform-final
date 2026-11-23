@@ -17,35 +17,14 @@ from typing import Protocol
 import clickhouse_connect
 
 from incident_schemas import LogEvent, MetricEvent, TraceSpanEvent
+from incident_schemas.clickhouse_ddl import CREATE_TABLE_SQL, MIGRATION_SQL, TELEMETRY_TABLE
 
 logger = logging.getLogger(__name__)
 
 TelemetryEventUnion = LogEvent | MetricEvent | TraceSpanEvent
 
-_TABLE = "telemetry_raw"
-
-_CREATE_TABLE_SQL = f"""
-CREATE TABLE IF NOT EXISTS {_TABLE} (
-    workspace_id    UUID,
-    service_name    LowCardinality(String),
-    kind            LowCardinality(String),
-    timestamp       DateTime64(3, 'UTC'),
-    severity        LowCardinality(String) DEFAULT '',
-    message         String DEFAULT '',
-    metric_name     LowCardinality(String) DEFAULT '',
-    value           Nullable(Float64),
-    trace_id        String DEFAULT '',
-    span_id         String DEFAULT '',
-    operation_name  String DEFAULT '',
-    duration_ms     Nullable(Float64),
-    status          LowCardinality(String) DEFAULT '',
-    attributes      String DEFAULT '{{}}'
-)
-ENGINE = MergeTree
-PARTITION BY toYYYYMMDD(timestamp)
-ORDER BY (workspace_id, service_name, timestamp)
-TTL toDateTime(timestamp) + INTERVAL 90 DAY
-"""
+_TABLE = TELEMETRY_TABLE
+_CREATE_TABLE_SQL = CREATE_TABLE_SQL
 
 
 def _event_to_row(event: TelemetryEventUnion) -> dict:
@@ -66,6 +45,7 @@ def _event_to_row(event: TelemetryEventUnion) -> dict:
         "duration_ms": None,
         "status": "",
         "attributes": "{}",
+        "parent_span_id": "",
     }
 
     if isinstance(event, LogEvent):
@@ -86,6 +66,7 @@ def _event_to_row(event: TelemetryEventUnion) -> dict:
         row.update(
             trace_id=event.trace_id,
             span_id=event.span_id,
+            parent_span_id=event.parent_span_id or "",
             operation_name=event.operation_name,
             duration_ms=event.duration_ms,
             status=event.status,
@@ -173,6 +154,8 @@ class ClickHouseTelemetryWriter:
             ),
         )
         await loop.run_in_executor(None, lambda: self._client.command(_CREATE_TABLE_SQL))
+        for statement in MIGRATION_SQL:  # upgrade tables created before derived columns existed
+            await loop.run_in_executor(None, lambda sql=statement: self._client.command(sql))
         self._flush_task = asyncio.create_task(self._flush_loop())
         logger.info("clickhouse_writer_started", extra={"database": self._database})
 
