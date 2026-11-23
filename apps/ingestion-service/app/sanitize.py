@@ -23,12 +23,23 @@ def clean_text(value: str, limit: int, enabled: bool = True) -> str:
     return value if len(value) <= limit else value[:limit] + "…[truncated]"
 
 
+URL_KEYS = {"http.url", "url.full", "http.target", "url.path_and_query"}
+
+
+def strip_query(value: str) -> str:
+    i = value.find("?")
+    return value if i == -1 else value[:i] + "?[REDACTED]"
+
+
 def clean_attributes(attrs: dict, enabled: bool = True) -> dict:
     out: dict = {}
     for k, v in list(attrs.items())[:MAX_ATTRS]:
         if is_sensitive_key(k):
             out[k] = "[REDACTED:KEY]"
+        elif k == "url.query":
+            out[k] = "[REDACTED]"
         elif isinstance(v, str):
+            v = strip_query(v) if k in URL_KEYS else v
             out[k] = clean_text(v, MAX_ATTR_VALUE, enabled)
         else:
             out[k] = v

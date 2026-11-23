@@ -64,6 +64,14 @@ def _service(resource_attrs: dict) -> str:
     return str(resource_attrs.get("service.name") or "unknown_service")[:200]
 
 
+RELEASE_KEYS = ("deployment.environment", "service.version", "vcs.commit.id")
+
+
+def _release_attrs(ra: dict) -> dict:
+    """Resource-level release identity, copied onto every event so incidents can be tied to a deploy."""
+    return {k: ra[k] for k in RELEASE_KEYS if k in ra}
+
+
 def _hex(v: Any) -> str | None:
     return v if isinstance(v, str) and v else None
 
@@ -81,9 +89,8 @@ def convert_traces(body: dict) -> list[dict]:
             for sp in ss.get("spans") or []:
                 start, end = _ts(sp.get("startTimeUnixNano")), _ts(sp.get("endTimeUnixNano"))
                 attrs = _attrs(sp.get("attributes"))
-                for k in ("deployment.environment", "service.version"):
-                    if k in ra:
-                        attrs.setdefault(k, ra[k])
+                for k, v in _release_attrs(ra).items():
+                    attrs.setdefault(k, v)
                 attrs["span.kind"] = int(sp.get("kind") or 0)
                 status = _SPAN_STATUS.get(int((sp.get("status") or {}).get("code") or 0), "unset")
                 msg = (sp.get("status") or {}).get("message")
@@ -108,7 +115,7 @@ def convert_traces(body: dict) -> list[dict]:
                             "timestamp": _ts(ev.get("timeUnixNano") or sp.get("startTimeUnixNano")),
                             "severity": "error", "message": str(text)[:8000],
                             "trace_id": sp["traceId"], "span_id": sp["spanId"],
-                            "attributes": {"exception.type": str(ea.get("exception.type", "")), "source": "span_event"},
+                            "attributes": {**_release_attrs(ra), "exception.type": str(ea.get("exception.type", "")), "source": "span_event"},
                         })
     return events
 
@@ -129,7 +136,7 @@ def _severity(number: Any, text: Any) -> str:
 def convert_logs(body: dict) -> list[dict]:
     events: list[dict] = []
     for rl in body.get("resourceLogs") or []:
-        service, _ = _resource(rl)
+        service, ra = _resource(rl)
         for sl in rl.get("scopeLogs") or []:
             for rec in sl.get("logRecords") or []:
                 body_val = _any_value(rec.get("body"))
@@ -139,7 +146,7 @@ def convert_logs(body: dict) -> list[dict]:
                     "timestamp": _ts(rec.get("timeUnixNano") or rec.get("observedTimeUnixNano")),
                     "severity": _severity(rec.get("severityNumber"), rec.get("severityText")),
                     "message": message[:8000], "trace_id": _hex(rec.get("traceId")), "span_id": _hex(rec.get("spanId")),
-                    "attributes": _attrs(rec.get("attributes")),
+                    "attributes": {**_release_attrs(ra), **_attrs(rec.get("attributes"))},
                 })
     return events
 
@@ -155,7 +162,8 @@ def _number(dp: dict) -> float | None:
 def convert_metrics(body: dict) -> list[dict]:
     events: list[dict] = []
     for rm in body.get("resourceMetrics") or []:
-        service, _ = _resource(rm)
+        service, ra = _resource(rm)
+        rel = _release_attrs(ra)
         for sm in rm.get("scopeMetrics") or []:
             for m in sm.get("metrics") or []:
                 name, unit = str(m.get("name") or "")[:200], m.get("unit")
@@ -167,10 +175,10 @@ def convert_metrics(body: dict) -> list[dict]:
                         if v is not None:
                             events.append({"kind": "metric", "workspace_id": PLACEHOLDER_WORKSPACE, "service_name": service,
                                            "timestamp": _ts(dp.get("timeUnixNano")), "metric_name": name, "value": v,
-                                           "unit": unit, "attributes": {**_attrs(dp.get("attributes")), "otlp.type": kind}})
+                                           "unit": unit, "attributes": {**rel, **_attrs(dp.get("attributes")), "otlp.type": kind}})
                 for dp in (m.get("histogram") or {}).get("dataPoints") or []:
                     count = int(dp.get("count") or 0)
-                    attrs = _attrs(dp.get("attributes"))
+                    attrs = {**rel, **_attrs(dp.get("attributes"))}
                     ts = _ts(dp.get("timeUnixNano"))
                     events.append({"kind": "metric", "workspace_id": PLACEHOLDER_WORKSPACE, "service_name": service,
                                    "timestamp": ts, "metric_name": f"{name}.count", "value": float(count), "unit": "1",

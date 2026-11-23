@@ -152,6 +152,23 @@ def test_convert_rejects_bad_span():
         convert_traces(traces_body(span(traceId="")))
 
 
+def test_release_identity_copied_to_all_signals():
+    res = {"attributes": [{"key": "service.name", "value": {"stringValue": "shop"}},
+                          {"key": "service.version", "value": {"stringValue": "1.4.5"}},
+                          {"key": "vcs.commit.id", "value": {"stringValue": "abc123"}}]}
+    logs = convert_logs({"resourceLogs": [{"resource": res, "scopeLogs": [{"logRecords": [{"timeUnixNano": str(NS), "body": {"stringValue": "x"}}]}]}]})
+    mets = convert_metrics({"resourceMetrics": [{"resource": res, "scopeMetrics": [{"metrics": [
+        {"name": "m", "gauge": {"dataPoints": [{"timeUnixNano": str(NS), "asInt": "1"}]}}]}]}]})
+    spans = convert_traces({"resourceSpans": [{"resource": res, "scopeSpans": [{"spans": [span()]}]}]})
+    for ev in (logs[0], mets[0], spans[0]):
+        assert ev["attributes"]["vcs.commit.id"] == "abc123" and ev["attributes"]["service.version"] == "1.4.5"
+
+
+def test_url_query_strings_are_stripped_server_side():
+    out = clean_attributes({"http.url": "http://x/api?token=abc&email=a@b.com", "url.query": "token=abc", "http.route": "/api"})
+    assert out["http.url"] == "http://x/api?[REDACTED]" and out["url.query"] == "[REDACTED]" and out["http.route"] == "/api"
+
+
 def test_convert_logs_severity_and_correlation():
     body = {"resourceLogs": [{"resource": {"attributes": [{"key": "service.name", "value": {"stringValue": "shop"}}]},
             "scopeLogs": [{"logRecords": [{"timeUnixNano": str(NS), "severityNumber": 17, "body": {"stringValue": "db down"},
