@@ -19,7 +19,8 @@ from fastapi import FastAPI
 
 from app.config import get_settings
 from app.hypothesis_writer import PostgresHypothesisWriter
-from app.llm_client import GeminiLLMClient
+from incident_llm import LLMClient as CentralLLMClient
+from app.llm_client import CentralHypothesisClient
 from app.logging_config import configure_logging
 from app.metrics import (
     CANDIDATES_WITH_NO_VALID_HYPOTHESIS_TOTAL,
@@ -95,15 +96,14 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     configure_logging(settings.log_level)
 
-    if not settings.gemini_api_key:
-        logger.warning(
-            "gemini_api_key_not_set - reasoning service will fail on the first "
-            "candidate it tries to process. Set GEMINI_API_KEY in .env."
-        )
-
-    llm_client = GeminiLLMClient(
-        api_key=settings.gemini_api_key, max_tokens=settings.reasoning_max_tokens
-    )
+    central_llm = CentralLLMClient()
+    llm_status = central_llm.status()
+    if llm_status["state"] != "configured":
+        logger.warning("llm_not_ready", extra=llm_status)
+    else:
+        logger.info("llm_ready", extra={"provider": llm_status["provider"], "model": llm_status["model"]})
+    app.state.llm_status = central_llm.status
+    llm_client = CentralHypothesisClient(central_llm)
     pipeline = ReasoningPipeline(llm_client=llm_client, max_attempts=settings.reasoning_max_attempts)
 
     writer = PostgresHypothesisWriter(settings.database_url)
@@ -122,7 +122,7 @@ async def lifespan(app: FastAPI):
     app.state.stats = _stats
 
     consume_task = asyncio.create_task(
-        _consume_loop(consumer, pipeline, writer, settings.reasoning_model_synthesis, settings.reasoning_max_concurrency)
+        _consume_loop(consumer, pipeline, writer, central_llm.config.model, settings.reasoning_max_concurrency)
     )
 
     logger.info("reasoning_service_started", extra={"environment": settings.environment})
@@ -141,6 +141,12 @@ def create_app() -> FastAPI:
     @app.get("/healthz", tags=["ops"])
     async def healthz() -> dict:
         return {"status": "ok"}
+
+    @app.get("/llm-status", tags=["ops"])
+    async def llm_status() -> dict:
+        # Reports provider/model/state only; never any secret value.
+        status_fn = getattr(app.state, "llm_status", None)
+        return status_fn() if status_fn else {"state": "unknown"}
 
     @app.get("/stats", tags=["ops"])
     async def stats() -> dict:

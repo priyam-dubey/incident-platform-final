@@ -1,12 +1,15 @@
-"""Gemini SDK wrapper enforcing JSON-schema structured output."""
+"""Reasoning-service LLM adapter.
+
+All provider, model and key handling lives in the shared incident_llm package
+(configured only by LLM_MODEL and LLM_API_KEY). This module only maps the
+reasoning pipeline's call shape onto that central client.
+"""
 
 from __future__ import annotations
 
-import json
 from typing import Protocol
 
-from google import genai
-from google.genai import types
+from incident_llm import LLMClient as CentralLLMClient
 
 from app.structured_output import HypothesisSetDraft
 
@@ -17,31 +20,13 @@ class LLMClient(Protocol):
     ) -> HypothesisSetDraft: ...
 
 
-class GeminiLLMClient:
-    def __init__(self, api_key: str, max_tokens: int = 4096) -> None:
-        self._client = genai.Client(api_key=api_key)
-        self._max_tokens = max_tokens
+class CentralHypothesisClient:
+    def __init__(self, central: CentralLLMClient) -> None:
+        self._central = central
 
     async def generate_hypotheses(
-        self, system_prompt: str, user_prompt: str, model: str
+        self, system_prompt: str, user_prompt: str, model: str = ""
     ) -> HypothesisSetDraft:
-        response = await self._client.aio.models.generate_content(
-            model=model,
-            contents=user_prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=system_prompt,
-                response_mime_type="application/json",
-                response_schema=HypothesisSetDraft,
-                max_output_tokens=self._max_tokens,
-            ),
-        )
-
-        # The SDK provides ``parsed`` for schema-constrained responses. Fall
-        # back to the returned JSON text to give a clear validation failure if
-        # a future SDK version does not populate that convenience property.
-        payload = response.parsed
-        if payload is None:
-            if not response.text:
-                raise RuntimeError("Gemini response did not contain structured JSON output")
-            payload = json.loads(response.text)
-        return HypothesisSetDraft.model_validate(payload)
+        # `model` is retained for call-compatibility; the active model comes
+        # exclusively from LLM_MODEL via the central client.
+        return await self._central.generate_structured(system_prompt, user_prompt, HypothesisSetDraft)

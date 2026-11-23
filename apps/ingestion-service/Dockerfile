@@ -5,6 +5,7 @@ WORKDIR /srv
 # Copy the shared schemas package first since requirements.txt installs it
 # from a relative file path - build context must include packages/schemas.
 COPY packages/schemas /srv/packages/schemas
+COPY packages/redaction /srv/packages/redaction
 COPY apps/ingestion-service/requirements.txt /srv/apps/ingestion-service/requirements.txt
 
 WORKDIR /srv/apps/ingestion-service

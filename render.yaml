@@ -103,10 +103,10 @@ services:
         sync: false
       - key: KAFKA_TOPIC_INCIDENT_CANDIDATES
         value: incident.candidates
-      - key: GEMINI_API_KEY
+      - key: LLM_API_KEY
         sync: false
-      - key: REASONING_MODEL_SYNTHESIS
-        value: gemini-2.5-flash
+      - key: LLM_MODEL
+        value: gemini/gemini-2.5-flash
       - key: ENVIRONMENT
         value: production
 

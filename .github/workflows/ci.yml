@@ -119,6 +119,42 @@ jobs:
         working-directory: apps/reasoning-service
         run: pytest -v
 
+  llm:
+    name: Central LLM client (packages/llm)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - working-directory: packages/llm
+        run: pip install -e ".[dev]" && pytest -v
+
+  api-gateway:
+    name: API gateway (apps/api-gateway, real Postgres)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: incident_app
+          POSTGRES_PASSWORD: incident_app_dev_password
+          POSTGRES_DB: incident_platform
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U incident_app" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - working-directory: apps/api-gateway
+        run: pip install -r requirements-dev.txt
+      - working-directory: apps/api-gateway
+        env:
+          TEST_DATABASE_URL: postgresql://incident_app:incident_app_dev_password@localhost:5432/incident_platform
+        run: pytest -v
+
   alert-router:
     name: Alert router (apps/alert-router)
     runs-on: ubuntu-latest

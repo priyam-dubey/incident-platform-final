@@ -27,7 +27,9 @@ from app.kafka_producer import EventPublisher, KafkaEventPublisher
 from app.logging_config import configure_logging
 from app.metrics import PrometheusMiddleware, metrics_response
 from app.rate_limiter import TokenBucketLimiter
+from app.routes.otlp import router as otlp_router
 from app.routes.telemetry import router as telemetry_router
+from app.tenant_auth import GatewayKeyResolver
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +66,13 @@ def _build_lifespan(
         settings = get_settings()
         configure_logging(settings.log_level)
 
+        if not settings.gateway_mode and settings.environment != "development":
+            raise RuntimeError(
+                "Outside development, set GATEWAY_URL and INTERNAL_API_TOKEN so per-application keys "
+                "decide the tenant. Static keys trust the payload's workspace_id and are dev-only."
+            )
+        app.state.key_resolver = GatewayKeyResolver(settings) if settings.gateway_mode else None
+
         app.state.event_publisher = event_publisher_factory(settings)
         app.state.telemetry_writer = telemetry_writer_factory(settings)
         app.state.rate_limiter = TokenBucketLimiter(
@@ -77,6 +86,8 @@ def _build_lifespan(
 
         yield
 
+        if app.state.key_resolver is not None:
+            await app.state.key_resolver.close()
         await app.state.telemetry_writer.stop()
         await app.state.event_publisher.stop()
         logger.info("ingestion_service_stopped")
@@ -95,6 +106,7 @@ def create_app(
     )
 
     app.include_router(telemetry_router)
+    app.include_router(otlp_router)
     app.add_middleware(PrometheusMiddleware)
 
     @app.get("/healthz", tags=["ops"])
