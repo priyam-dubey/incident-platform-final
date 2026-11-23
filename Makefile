@@ -1,4 +1,4 @@
-.PHONY: test-gateway run-gateway test-llm infra-up infra-down infra-logs migrate migrate-status test-db test-schemas test-redaction test-ingestion test-correlation test-reasoning test-alerts test-all run-ingestion run-correlation run-reasoning run-alerts run-dashboard
+.PHONY: test-e2e test-gateway run-gateway test-llm infra-up infra-down infra-logs migrate migrate-status test-db test-schemas test-redaction test-ingestion test-correlation test-reasoning test-alerts test-all run-ingestion run-correlation run-reasoning run-alerts run-dashboard
 
 infra-up:
 	docker compose -f infra/docker/docker-compose.yml up -d
@@ -56,6 +56,9 @@ test-all: test-gateway test-llm test-db test-schemas test-redaction test-ingesti
 
 test-llm:
 	cd packages/llm && pytest -v
+
+test-e2e:
+	cd tests/e2e && TEST_DATABASE_URL=$$TEST_DATABASE_URL pytest -v   # needs Postgres; runs gateway + ingestion locally
 
 test-gateway:
 	cd apps/api-gateway && pytest -v   # set TEST_DATABASE_URL to run the integration tests

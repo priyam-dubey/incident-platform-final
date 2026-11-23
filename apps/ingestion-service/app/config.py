@@ -24,6 +24,22 @@ class Settings(BaseSettings):
     ingestion_api_key_header: str = "X-Ingestion-Key"
     ingestion_valid_api_keys: str = "dev-local-ingestion-key"
 
+    # --- per-application keys (SaaS mode) ---
+    # When GATEWAY_URL + INTERNAL_API_TOKEN are set, every ingestion key is verified
+    # against the API gateway and the key - not the request body - decides the tenant.
+    # Otherwise the legacy static key list above is used (development only).
+    gateway_url: str = ""
+    internal_api_token: str = ""
+    key_cache_ttl_seconds: int = 30
+    key_negative_cache_ttl_seconds: int = 5
+    max_events_per_request: int = 1000
+    max_body_bytes: int = 5_000_000
+    redact_telemetry: bool = True
+
+    @property
+    def gateway_mode(self) -> bool:
+        return bool(self.gateway_url and self.internal_api_token)
+
     # --- kafka ---
     kafka_bootstrap_servers: str = "localhost:9092"
     kafka_topic_telemetry_events: str = "telemetry.events"
