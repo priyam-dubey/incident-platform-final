@@ -12,7 +12,7 @@ from app.config import get_settings
 from app.db import make_pool
 from app.rate_limit import SlidingWindowLimiter
 from app.repository import Repository
-from app.routes import applications, auth, incidents, internal, telemetry, workspaces
+from app.routes import applications, auth, code, github, incidents, internal, telemetry, workspaces
 
 logger = logging.getLogger("api-gateway")
 MAX_BODY_BYTES = 1_000_000
@@ -38,7 +38,16 @@ async def lifespan(app: FastAPI):
     if not hasattr(app.state, "repo"):
         app.state.pool = make_pool(settings.database_url)
         app.state.repo = Repository(app.state.pool)
+    stop = None
+    if settings.scan_worker_enabled and not getattr(app.state, "no_worker", False):
+        import threading
+
+        from app.scan_worker import run_forever
+        stop = threading.Event()
+        threading.Thread(target=run_forever, args=(app.state.repo, stop), daemon=True, name="scan-worker").start()
     yield
+    if stop is not None:
+        stop.set()
     pool = getattr(app.state, "pool", None)
     if pool is not None:
         pool.close()
@@ -70,6 +79,9 @@ def create_app() -> FastAPI:
     app.include_router(applications.router)
     app.include_router(telemetry.router)
     app.include_router(incidents.router)
+    app.include_router(github.router)
+    app.include_router(github.public)
+    app.include_router(code.router)
     app.include_router(incidents.ingest_router)
     app.include_router(internal.router)
 

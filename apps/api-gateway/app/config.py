@@ -45,6 +45,18 @@ class Settings(BaseSettings):
     pagerduty_routing_key: str = ""
     notify_min_severity: str = "high"
 
+    # --- GitHub App (all optional; unset = 'not configured') ---
+    github_app_id: str = ""
+    github_app_slug: str = ""
+    github_app_private_key: str = ""       # PEM contents (use \n for newlines) ...
+    github_app_private_key_path: str = ""  # ... or a path to the .pem file
+    github_webhook_secret: str = ""
+    github_api_url: str = "https://api.github.com"
+    scan_worker_enabled: bool = False
+    scan_max_archive_mb: int = 200
+    scan_max_files: int = 50000
+    scan_enabled_tools: str = "semgrep,bandit,ruff,eslint,tsc,gitleaks,npm-audit,pip-audit,trivy"
+
     # --- rate limits (per client IP, per minute) ---
     auth_rate_limit_per_minute: int = 20
 

@@ -1,0 +1,29 @@
+# Scan worker: downloads a commit snapshot from GitHub and analyses it statically. Never runs repository code.
+FROM python:3.12-slim
+ARG GITLEAKS_VERSION=8.18.4
+ARG TRIVY_VERSION=0.58.1
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates nodejs npm util-linux \
+ && rm -rf /var/lib/apt/lists/* \
+ && npm install -g --ignore-scripts eslint@9 typescript@5 \
+ && python -m venv /opt/semgrep && /opt/semgrep/bin/pip install --no-cache-dir semgrep \
+ && cd /tmp \
+ && curl -fsSLO https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz \
+ && curl -fsSLO https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_checksums.txt \
+ && grep "linux_x64.tar.gz" gitleaks_${GITLEAKS_VERSION}_checksums.txt | sha256sum -c - \
+ && tar xzf gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz -C /usr/local/bin gitleaks \
+ && curl -fsSLO https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz \
+ && curl -fsSLO https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_checksums.txt \
+ && grep "Linux-64bit.tar.gz" trivy_${TRIVY_VERSION}_checksums.txt | sha256sum -c - \
+ && tar xzf trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz -C /usr/local/bin trivy && rm -f /tmp/*
+WORKDIR /srv
+COPY packages/llm /srv/packages/llm
+COPY packages/schemas /srv/packages/schemas
+COPY packages/redaction /srv/packages/redaction
+COPY packages/scanner /srv/packages/scanner
+COPY apps/api-gateway/requirements.txt apps/api-gateway/requirements-worker.txt /srv/apps/api-gateway/
+WORKDIR /srv/apps/api-gateway
+RUN pip install --no-cache-dir -r requirements-worker.txt && useradd --create-home --uid 10001 scanner
+COPY apps/api-gateway/app /srv/apps/api-gateway/app
+USER scanner
+ENV PYTHONUNBUFFERED=1 SCANNER_TOOL_PATH=/opt/semgrep/bin
+CMD ["python", "-m", "app.scan_worker"]

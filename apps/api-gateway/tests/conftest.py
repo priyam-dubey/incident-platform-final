@@ -80,3 +80,10 @@ def make_user(client):
 def db():
     with psycopg.connect(TEST_DB, autocommit=True) as conn:
         yield conn
+
+
+# Make locally installed analysis tools (semgrep, gitleaks, ...) discoverable for scan tests, if present.
+_S = pathlib.Path("/tmp/claude-0/-home-claude/162ae94c-78d8-5309-ab2c-5867527ed50b/scratchpad")
+for _d in (_S / "semgrepenv" / "bin", _S / "tools"):
+    if _d.exists():
+        os.environ["SCANNER_TOOL_PATH"] = os.pathsep.join(filter(None, [os.environ.get("SCANNER_TOOL_PATH"), str(_d)]))

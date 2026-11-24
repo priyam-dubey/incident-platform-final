@@ -1,0 +1,98 @@
+rules:
+  - id: js-eval-use
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "eval() executes arbitrary strings as code; avoid it or restrict input to constants."
+    pattern: eval(...)
+    metadata: {cwe: "CWE-95"}
+  - id: js-child-process-exec-dynamic
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "child_process exec/execSync with a non-literal command can allow command injection. Use execFile with an argument array."
+    patterns:
+      - pattern-either:
+          - pattern: $CP.exec($CMD, ...)
+          - pattern: $CP.execSync($CMD, ...)
+          - pattern: exec($CMD, ...)
+          - pattern: execSync($CMD, ...)
+      - pattern-not: $CP.exec("...", ...)
+      - pattern-not: $CP.execSync("...", ...)
+      - pattern-not: exec("...", ...)
+      - pattern-not: execSync("...", ...)
+    metadata: {cwe: "CWE-78"}
+  - id: js-tls-verification-disabled
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "TLS certificate verification is disabled (rejectUnauthorized: false)."
+    pattern: "{..., rejectUnauthorized: false, ...}"
+    metadata: {cwe: "CWE-295"}
+  - id: js-innerhtml-assignment
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "Assigning to innerHTML with non-constant data can cause XSS. Prefer textContent or a sanitizer."
+    patterns:
+      - pattern: $EL.innerHTML = $X
+      - pattern-not: $EL.innerHTML = "..."
+    metadata: {cwe: "CWE-79"}
+  - id: js-mongo-where-operator
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "MongoDB $where evaluates JavaScript; with user input it enables injection."
+    pattern: "{..., $where: $X, ...}"
+    metadata: {cwe: "CWE-943"}
+  - id: js-jwt-verify-none-algorithm
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "JWT verification must not allow the 'none' algorithm."
+    pattern: "jwt.verify($T, $K, {..., algorithms: [..., 'none', ...]})"
+    metadata: {cwe: "CWE-347"}
+  - id: js-math-random-for-security
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Math.random() is not cryptographically secure; use crypto.randomBytes/randomUUID for tokens or secrets."
+    pattern-regex: "(?i)(token|secret|password|otp|nonce)[^\\n]{0,60}Math\\.random\\(\\)"
+    metadata: {cwe: "CWE-338"}
+  - id: js-cors-wildcard-with-credentials
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "CORS allows any origin together with credentials."
+    pattern: "cors({..., origin: '*', credentials: true, ...})"
+    metadata: {cwe: "CWE-942"}
+  - id: py-eval-exec
+    languages: [python]
+    severity: ERROR
+    message: "eval()/exec() on dynamic input allows code injection."
+    pattern-either:
+      - pattern: eval($X)
+      - pattern: exec($X)
+    metadata: {cwe: "CWE-95"}
+  - id: py-subprocess-shell-true
+    languages: [python]
+    severity: ERROR
+    message: "subprocess with shell=True and a dynamic command can allow command injection."
+    pattern: subprocess.$F(..., shell=True, ...)
+    metadata: {cwe: "CWE-78"}
+  - id: py-sql-string-formatting
+    languages: [python]
+    severity: ERROR
+    message: "SQL built with string formatting/concatenation; use parameterized queries."
+    pattern-either:
+      - pattern: $C.execute(f"...", ...)
+      - pattern: $C.execute("..." % $X, ...)
+      - pattern: $C.execute("..." + $X, ...)
+      - pattern: $C.execute("...".format(...), ...)
+    metadata: {cwe: "CWE-89"}
+  - id: py-requests-verify-false
+    languages: [python]
+    severity: ERROR
+    message: "TLS verification disabled (verify=False)."
+    pattern: requests.$F(..., verify=False, ...)
+    metadata: {cwe: "CWE-295"}
+  - id: py-yaml-unsafe-load
+    languages: [python]
+    severity: ERROR
+    message: "yaml.load without a safe loader can construct arbitrary objects; use yaml.safe_load."
+    patterns:
+      - pattern: yaml.load($X)
+      - pattern-not: yaml.load($X, Loader=yaml.SafeLoader)
+    metadata: {cwe: "CWE-502"}

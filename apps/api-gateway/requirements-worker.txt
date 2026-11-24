@@ -1,0 +1,6 @@
+-r requirements.txt
+../../packages/scanner
+# Python-based analysis tools. semgrep, gitleaks, trivy, eslint and tsc are installed in Dockerfile.worker.
+bandit==1.8.0
+ruff==0.8.4
+pip-audit==2.7.3
