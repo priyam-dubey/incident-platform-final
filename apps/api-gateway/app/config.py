@@ -37,6 +37,14 @@ class Settings(BaseSettings):
     clickhouse_db: str = "incident_telemetry"
     telemetry_query_timeout_seconds: int = 20
 
+    # --- incident detection / notifications (all optional; unset = 'not configured', never faked) ---
+    detection_enabled: bool = False        # background loop; manual 'run detection' always works
+    detection_interval_seconds: int = 60
+    rca_enabled: bool = True               # still requires LLM_API_KEY; without it incidents stay deterministic-only
+    slack_webhook_url: str = ""
+    pagerduty_routing_key: str = ""
+    notify_min_severity: str = "high"
+
     # --- rate limits (per client IP, per minute) ---
     auth_rate_limit_per_minute: int = 20
 

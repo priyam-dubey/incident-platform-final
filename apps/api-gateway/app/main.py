@@ -12,7 +12,7 @@ from app.config import get_settings
 from app.db import make_pool
 from app.rate_limit import SlidingWindowLimiter
 from app.repository import Repository
-from app.routes import applications, auth, internal, telemetry, workspaces
+from app.routes import applications, auth, incidents, internal, telemetry, workspaces
 
 logger = logging.getLogger("api-gateway")
 MAX_BODY_BYTES = 1_000_000
@@ -69,6 +69,8 @@ def create_app() -> FastAPI:
     app.include_router(workspaces.router)
     app.include_router(applications.router)
     app.include_router(telemetry.router)
+    app.include_router(incidents.router)
+    app.include_router(incidents.ingest_router)
     app.include_router(internal.router)
 
     @app.get("/healthz", tags=["ops"])

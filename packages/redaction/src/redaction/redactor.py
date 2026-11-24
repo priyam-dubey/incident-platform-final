@@ -31,6 +31,10 @@ _PATTERNS: dict[str, re.Pattern[str]] = {
         r"(?i)\b(api[_-]?key|token|secret|bearer|authorization)\b\s*[:=]?\s*['\"]?"
         r"([A-Za-z0-9_\-\.]{20,})['\"]?"
     ),
+    # key=value credential assignments of ANY length ("password=hunter2", "pwd: abc"); the label is kept.
+    "credential_assignment": re.compile(
+        r"(?i)\b((?:password|passwd|pwd|passphrase|secret|client_secret|private_key|access_key)\w*)\b(\s*[:=]\s*)['\"]?[^\s'\",;&]+['\"]?"
+    ),
     "aws_access_key": re.compile(r"\b(AKIA|ASIA)[A-Z0-9]{16}\b"),
     "jwt": re.compile(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b"),
     # Credit card numbers: either grouped with separators (the overwhelmingly
@@ -54,7 +58,7 @@ _PATTERNS: dict[str, re.Pattern[str]] = {
 # Phone-number-shaped strings collide heavily with order ids, ports, and
 # other numeric telemetry. Both are available for callers with a specific
 # compliance need, but neither is in the default set.
-DEFAULT_CATEGORIES = frozenset({"email", "api_key", "aws_access_key", "jwt", "credit_card"})
+DEFAULT_CATEGORIES = frozenset({"email", "credential_assignment", "api_key", "aws_access_key", "jwt", "credit_card"})
 
 
 @dataclass(frozen=True)
@@ -77,6 +81,8 @@ def redact(text: str, categories: frozenset[str] = DEFAULT_CATEGORIES) -> Redact
             raise ValueError(f"unknown redaction category: {category!r}")
 
         def _replace(match: re.Match[str], cat: str = category) -> str:
+            if cat == "credential_assignment":
+                return f"{match.group(1)}{match.group(2)}[REDACTED:CREDENTIAL]"
             return f"[REDACTED:{cat.upper()}]"
 
         new_result, count = pattern.subn(_replace, result)

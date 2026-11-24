@@ -33,11 +33,18 @@ def pytest_collection_modifyitems(config, items):
 
 @pytest.fixture(scope="session")
 def db_ready():
-    with psycopg.connect(TEST_DB, autocommit=True) as conn:
-        exists = conn.execute("SELECT to_regclass('public.users')").fetchone()[0]
-        if not exists:
-            for f in sorted(MIGRATIONS.glob("*.sql")):
-                conn.execute(f.read_text())
+    """Apply any pending migrations with the project's own runner (so tests exercise it too)."""
+    import sys
+
+    sys.path.insert(0, str(MIGRATIONS.parent / "src"))
+    import migrate
+
+    with psycopg.connect(TEST_DB) as conn:
+        applied = migrate.fetch_applied(conn)
+        conn.commit()
+        for m in migrate.discover_migrations():
+            if m.version not in applied:
+                migrate.apply_migration(conn, m)
     return True
 
 
