@@ -1,34 +1,25 @@
-/**
- * Workspace entry point. This platform doesn't have real dashboard
- * authentication yet (documented scope cut - see the root README's Phase 7
- * notes), so instead of pretending a login exists, this is honest about
- * what it actually is: a way to jump into a known workspace id. A real
- * auth/session layer would replace this page with a redirect, not add a
- * form on top of it.
- */
-export default function HomePage() {
+import Link from "next/link";
+
+const FEATURES = [
+  ["Code intelligence", "Connect a GitHub repository. Every push and pull request is analysed with Semgrep, Bandit, Ruff, ESLint, tsc, Gitleaks and dependency audits. Findings are deterministic; AI only explains them."],
+  ["Runtime monitoring", "Instrument a Node.js/Express app with our OpenTelemetry SDK. Requests, latency, errors, logs and traces appear per application, with process metrics clearly separated from host metrics."],
+  ["Evidence-grounded incidents", "Anomalies are detected statistically, then explained with hypotheses that must cite real evidence. Humans accept, reject or edit every conclusion."],
+  ["Code ↔ runtime", "Register deployments with a commit SHA. Incidents show what shipped just before them - as a correlation to check, never as proof."],
+];
+
+export default function Landing() {
   return (
-    <div className="mx-auto max-w-lg px-6 py-24">
-      <h1 className="font-display text-2xl font-medium">Open a workspace</h1>
-      <p className="mt-2 text-sm text-muted">
-        Enter a workspace id to view its incident feed. (No auth layer yet -
-        see the platform README for why, and what replaces this later.)
-      </p>
-      <form action="/incidents" method="GET" className="mt-6 flex gap-2">
-        <input
-          type="text"
-          name="workspace_id"
-          placeholder="11111111-1111-1111-1111-111111111111"
-          required
-          className="flex-1 border border-hairline bg-panel px-3 py-2 font-mono text-sm text-primary placeholder:text-muted focus:border-ai"
-        />
-        <button
-          type="submit"
-          className="border border-ai px-4 py-2 font-mono text-sm text-ai transition-colors hover:bg-ai hover:text-void"
-        >
-          OPEN
-        </button>
-      </form>
+    <div className="mx-auto max-w-5xl px-4 py-10">
+      <header className="flex items-center justify-between"><span className="font-semibold tracking-tight">Incident<span className="text-accent">/</span>Platform</span>
+        <nav className="flex gap-3 text-sm"><Link href="/login" className="rounded border border-line px-3 py-1.5 hover:bg-raised">Sign in</Link><Link href="/signup" className="rounded bg-accent px-3 py-1.5 font-medium text-white">Get started</Link></nav></header>
+      <section className="py-20 text-center">
+        <h1 className="mx-auto max-w-3xl text-4xl font-semibold tracking-tight md:text-5xl">Find the bug in the code, and the cause behind the outage.</h1>
+        <p className="mx-auto mt-5 max-w-2xl text-lg text-muted">One workspace for repository security findings and live application incidents - every claim linked to evidence you can inspect.</p>
+        <div className="mt-8 flex justify-center gap-3"><Link href="/signup" className="rounded bg-accent px-5 py-2.5 font-medium text-white">Create a workspace</Link><a href="#how" className="rounded border border-line px-5 py-2.5 hover:bg-raised">How it works</a></div>
+      </section>
+      <section id="how" className="grid gap-4 md:grid-cols-2">{FEATURES.map(([t, d]) => <div key={t} className="rounded-lg border border-line bg-panel p-5"><h2 className="font-semibold">{t}</h2><p className="mt-2 text-sm text-muted">{d}</p></div>)}</section>
+      <section className="mt-10 rounded-lg border border-line bg-panel p-5 text-sm text-muted"><h2 className="mb-2 font-semibold text-ink">Honest by design</h2>
+        <ul className="list-disc space-y-1 pl-5"><li>Integrations show <strong>Not configured</strong> until real credentials exist - nothing is faked.</li><li>Synthetic data is only ever shown in a workspace labelled <strong>DEMO</strong> and is never mixed with real telemetry.</li><li>Scanners read your code statically in a sandbox; repository code is never executed.</li><li>AI output is labelled, redacted going in, and optional - scanning and monitoring work without it.</li></ul></section>
     </div>
   );
 }

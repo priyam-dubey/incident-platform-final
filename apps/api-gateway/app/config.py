@@ -30,6 +30,33 @@ class Settings(BaseSettings):
     internal_api_token: str = ""  # used by ingestion-service to verify app keys
     public_ingestion_url: str = "http://localhost:8001"
 
+    # --- telemetry store (ClickHouse). Use a SELECT-only user for the gateway. ---
+    clickhouse_url: str = ""          # empty = telemetry queries report 'not configured' (no fake data)
+    clickhouse_user: str = "incident_app"
+    clickhouse_password: str = ""
+    clickhouse_db: str = "incident_telemetry"
+    telemetry_query_timeout_seconds: int = 20
+
+    # --- incident detection / notifications (all optional; unset = 'not configured', never faked) ---
+    detection_enabled: bool = False        # background loop; manual 'run detection' always works
+    detection_interval_seconds: int = 60
+    rca_enabled: bool = True               # still requires LLM_API_KEY; without it incidents stay deterministic-only
+    slack_webhook_url: str = ""
+    pagerduty_routing_key: str = ""
+    notify_min_severity: str = "high"
+
+    # --- GitHub App (all optional; unset = 'not configured') ---
+    github_app_id: str = ""
+    github_app_slug: str = ""
+    github_app_private_key: str = ""       # PEM contents (use \n for newlines) ...
+    github_app_private_key_path: str = ""  # ... or a path to the .pem file
+    github_webhook_secret: str = ""
+    github_api_url: str = "https://api.github.com"
+    scan_worker_enabled: bool = False
+    scan_max_archive_mb: int = 200
+    scan_max_files: int = 50000
+    scan_enabled_tools: str = "semgrep,bandit,ruff,eslint,tsc,gitleaks,npm-audit,pip-audit,trivy"
+
     # --- rate limits (per client IP, per minute) ---
     auth_rate_limit_per_minute: int = 20
 

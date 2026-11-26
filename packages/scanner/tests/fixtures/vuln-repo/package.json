@@ -1,0 +1,1 @@
+{"name":"evil","version":"1.0.0","scripts":{"postinstall":"touch /tmp/PWNED_POSTINSTALL","test":"touch /tmp/PWNED_TEST"}}

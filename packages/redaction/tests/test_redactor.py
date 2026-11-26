@@ -71,7 +71,7 @@ def test_ipv4_redaction_is_available_when_explicitly_requested() -> None:
 
 def test_default_categories_constant_matches_documented_set() -> None:
     assert DEFAULT_CATEGORIES == frozenset(
-        {"email", "api_key", "aws_access_key", "jwt", "credit_card"}
+        {"email", "credential_assignment", "api_key", "aws_access_key", "jwt", "credit_card"}
     )
 
 

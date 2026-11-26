@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import re
 import uuid
+from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 Role = Literal["owner", "admin", "developer", "viewer"]
 Environment = Literal["development", "staging", "production"]
@@ -82,3 +83,46 @@ class ApplicationOut(BaseModel):
     last_telemetry_at: str | None
     active_key_prefix: str | None
     created_at: str
+
+
+class DeploymentCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    version: str | None = Field(default=None, max_length=100)
+    commit_sha: str | None = Field(default=None, pattern=r"^[0-9a-fA-F]{7,64}$")
+    branch: str | None = Field(default=None, max_length=200)
+    repository: str | None = Field(default=None, max_length=200, pattern=r"^[\w.-]+/[\w.-]+$")
+    deployed_by: str | None = Field(default=None, max_length=200)
+    deployed_at: "datetime | None" = None
+    environment: Environment | None = None
+    metadata: dict = Field(default_factory=dict)
+
+    @field_validator("metadata")
+    @classmethod
+    def _small(cls, v: dict) -> dict:
+        import json as _j
+        if len(_j.dumps(v)) > 4000:
+            raise ValueError("metadata too large")
+        return v
+
+
+class NoteCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    body: str = Field(min_length=1, max_length=4000)
+
+
+class IncidentTransition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: Literal["resolved", "dismissed", "candidate", "pending_review"]
+
+
+class HypothesisReview(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    verdict: Literal["accepted", "rejected", "edited"]
+    notes: str | None = Field(default=None, max_length=2000)
+    edited_text: str | None = Field(default=None, max_length=1500)
+
+    @model_validator(mode="after")
+    def _need_text(self):
+        if self.verdict == "edited" and not self.edited_text:
+            raise ValueError("edited_text is required when verdict is 'edited'")
+        return self

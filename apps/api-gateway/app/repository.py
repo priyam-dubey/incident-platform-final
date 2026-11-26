@@ -26,7 +26,11 @@ def slugify(name: str) -> str:
     return base[:40]
 
 
-class Repository:
+from app.repo_code import CodeMixin  # noqa: E402
+from app.repo_incidents import IncidentMixin  # noqa: E402
+
+
+class Repository(IncidentMixin, CodeMixin):
     def __init__(self, pool: ConnectionPool) -> None:
         self.pool = pool
 
