@@ -22,7 +22,7 @@ size caps. Run the worker in its own container (`apps/api-gateway/Dockerfile.wor
 
 ## Lifecycle
 Findings have stable fingerprints (line shifts don't re-open them) and states `new / unchanged / fixed / reintroduced`.
-Triage (`open / acknowledged / false_positive / accepted_risk / fixed`) survives re-scans. Pull-request and branch scans are
+Triage (`open / ignored / false_positive / accepted_risk`; `fixed` is set by re-scans) survives re-scans. Pull-request and branch scans are
 stored on the scan and never alter default-branch state.
 
 ## Installing the tools
