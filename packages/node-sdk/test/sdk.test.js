@@ -69,3 +69,33 @@ test('expressErrorHandler forwards the error to next()', () => {
   sdk.expressErrorHandler()(err, { method: 'GET', route: { path: '/x' } }, {}, (e) => { forwarded = e; });
   assert.equal(forwarded, err);
 });
+
+const { registerDeployment } = require('../src/deployments');
+const mkFetch = (status, json = { id: 'dep-1' }, seen = {}) => async (url, init) => { seen.url = url; seen.init = init; return { ok: status < 300, status, json: async () => json }; };
+
+test('registerDeployment: posts commit/version with the ingestion key', async () => {
+  const seen = {};
+  const r = await registerDeployment({ apiUrl: 'https://api.example.com/', key: GOOD_KEY, repository: 'o/r' },
+    { INCIDENT_PLATFORM_COMMIT: 'abc1234', INCIDENT_PLATFORM_RELEASE: '1.2.3' }, mkFetch(201, { id: 'dep-1' }, seen));
+  assert.deepEqual(r, { ok: true, status: 201, id: 'dep-1' });
+  assert.equal(seen.url, 'https://api.example.com/v1/deployments');
+  assert.equal(seen.init.headers['X-Ingestion-Key'], GOOD_KEY);
+  assert.deepEqual(JSON.parse(seen.init.body), { version: '1.2.3', commit_sha: 'abc1234', repository: 'o/r' });
+});
+
+test('registerDeployment: never throws and never echoes the key', async () => {
+  assert.equal((await registerDeployment({}, {}, mkFetch(201))).ok, false);
+  assert.equal((await registerDeployment({ key: GOOD_KEY, apiUrl: 'ftp://x' }, {}, mkFetch(201))).ok, false);
+  const r401 = await registerDeployment({ key: GOOD_KEY, apiUrl: 'http://a' }, {}, mkFetch(401));
+  assert.deepEqual(r401, { ok: false, status: 401, error: 'platform responded 401' });
+  const boom = await registerDeployment({ key: GOOD_KEY, apiUrl: 'http://a' }, {}, async () => { throw new Error('connect ECONNREFUSED ' + GOOD_KEY); });
+  assert.equal(boom.ok, false);
+  assert.ok(!JSON.stringify(boom).includes(GOOD_KEY));
+});
+
+test('registerDeployment: falls back to the ingestion endpoint and is exported', async () => {
+  const seen = {};
+  await registerDeployment({}, { INCIDENT_PLATFORM_KEY: GOOD_KEY, INCIDENT_PLATFORM_ENDPOINT: 'http://ing:8001' }, mkFetch(201, {}, seen));
+  assert.equal(seen.url, 'http://ing:8001/v1/deployments');
+  assert.equal(typeof sdk.registerDeployment, 'function');
+});

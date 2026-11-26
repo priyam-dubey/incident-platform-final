@@ -45,7 +45,19 @@ async def lifespan(app: FastAPI):
         from app.scan_worker import run_forever
         stop = threading.Event()
         threading.Thread(target=run_forever, args=(app.state.repo, stop), daemon=True, name="scan-worker").start()
+    det_stop = None
+    if settings.detection_enabled and app.state.telemetry is not None and not getattr(app.state, "no_worker", False):
+        import threading
+
+        from app.detection_loop import run_forever as detect_forever
+        det_stop = threading.Event()
+        threading.Thread(target=detect_forever, args=(app.state.repo, app.state.telemetry, settings, det_stop,
+                         lambda: getattr(app.state, "llm", None)), daemon=True, name="detection").start()
+    elif settings.detection_enabled:
+        logger.warning("DETECTION_ENABLED is set but telemetry storage is unavailable; loop not started")
     yield
+    if det_stop is not None:
+        det_stop.set()
     if stop is not None:
         stop.set()
     pool = getattr(app.state, "pool", None)

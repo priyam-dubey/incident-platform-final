@@ -204,6 +204,22 @@ services:
       timeout: 5s
       retries: 5
 
+  scan-worker:
+    # Runs scanners against repository snapshots. Untrusted code is only READ, never executed;
+    # tools run with network isolation, rlimits and a scrubbed environment (see docs/guides/code-scanning.md).
+    build:
+      context: ../..
+      dockerfile: apps/api-gateway/Dockerfile.worker
+    container_name: incident-scan-worker
+    restart: unless-stopped
+    env_file:
+      - ../../.env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-incident_app}:${POSTGRES_PASSWORD:-incident_app_dev_password}@postgres:5432/${POSTGRES_DB:-incident_platform}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   dashboard:
     build:
       context: ../..
@@ -211,12 +227,11 @@ services:
     container_name: incident-dashboard
     restart: unless-stopped
     environment:
-      ALERT_ROUTER_URL: http://alert-router:8004
-      ALERT_ROUTER_API_KEY: ${ALERT_ROUTER_API_KEY:-dev-local-dashboard-key}
+      GATEWAY_URL: http://api-gateway:8005
     ports:
       - "${DASHBOARD_PORT:-3000}:3000"
     depends_on:
-      alert-router:
+      api-gateway:
         condition: service_healthy
 
 volumes:

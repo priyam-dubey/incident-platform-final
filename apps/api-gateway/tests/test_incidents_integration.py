@@ -195,3 +195,20 @@ def test_analyze_endpoint_reports_not_configured_honestly(client, store, make_us
     found = process_application(client.app.state.repo, store, app_row(client, u, app_id), get_settings(), FakeLLM([], "not_configured"))
     r = client.post(f"/v1/workspaces/{u['workspace_id']}/incidents/{found[0]['id']}/analyze", headers=u["headers"])
     assert r.status_code == 503 and r.json()["detail"]["code"] == "llm_not_configured"
+
+
+def test_detection_loop_isolates_failures(monkeypatch):
+    """One application raising must not stop detection for the others."""
+    from app import detection_loop
+    import app.routes.incidents as inc
+
+    class R:
+        def monitored_applications(self): return [{"id": "a"}, {"id": "b"}, {"id": "c"}]
+    seen = []
+
+    def fake(repo, ex, app, settings, llm=None):
+        seen.append(app["id"])
+        if app["id"] == "b": raise RuntimeError("boom")
+    monkeypatch.setattr(inc, "process_application", fake)
+    assert detection_loop.run_once(R(), object(), object()) == 2
+    assert seen == ["a", "b", "c"]

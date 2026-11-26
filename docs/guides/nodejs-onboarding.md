@@ -68,3 +68,20 @@ Export failures are swallowed; your app keeps serving requests.
 - Latency percentiles are computed server-side from request spans, so sampling would reduce accuracy (the SDK does not sample).
 - Auto-instrumentation covers http, Express and the MongoDB driver. Mongoose works through the driver. Other libraries
   (Redis, Postgres, axios/fetch outbound calls) are not instrumented yet.
+
+## Registering deployments
+
+Deployments are shown on incidents as *possible* causes (a hypothesis, never proof). Register one from CI or at startup:
+
+```js
+const incident = require('@incident-platform/node');
+await incident.registerDeployment({ repository: 'acme/shop', branch: 'main' });   // never throws; returns { ok, status, error? }
+```
+Version and commit default to `INCIDENT_PLATFORM_RELEASE` / `INCIDENT_PLATFORM_COMMIT`. The call goes to the **gateway**:
+set `INCIDENT_PLATFORM_API_URL=https://<gateway>` (it falls back to the ingestion endpoint, which is only right if both share a host).
+It is authenticated with the same application ingestion key. Equivalent raw call:
+
+```
+curl -X POST "$GATEWAY/v1/deployments" -H "X-Ingestion-Key: $INCIDENT_PLATFORM_KEY" \
+     -H 'content-type: application/json' -d '{"version":"1.4.2","commit_sha":"abc1234","environment":"production"}'
+```

@@ -15,6 +15,7 @@ const { MongoDBInstrumentation } = require('@opentelemetry/instrumentation-mongo
 
 const { resolveConfig } = require('./config');
 const { sanitizeAttributes } = require('./sanitize');
+const { registerDeployment } = require('./deployments');
 const { registerRuntimeMetrics } = require('./runtime-metrics');
 
 let state = { sdk: null, cfg: null, stopRuntime: null, started: false };
@@ -146,4 +147,4 @@ async function shutdown() {
   try { stopRuntime && stopRuntime(); await sdk.shutdown(); } catch { /* ignore */ }
 }
 
-module.exports = { init, shutdown, logger, captureException, expressErrorHandler, resolveConfig };
+module.exports = { init, registerDeployment, shutdown, logger, captureException, expressErrorHandler, resolveConfig };

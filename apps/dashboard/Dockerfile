@@ -1,20 +1,21 @@
 FROM node:20-slim AS deps
 WORKDIR /app
 COPY apps/dashboard/package.json apps/dashboard/package-lock.json* ./
-RUN npm install
+RUN npm ci
 
 FROM node:20-slim AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY apps/dashboard/ .
-# next/font/google fetches font metadata at build time - the build stage
-# needs internet access to fonts.googleapis.com, same requirement `npm run
-# build` has on a developer's own machine.
+# Fonts are self-hosted (src/fonts), so the build needs no network access beyond npm.
 RUN npm run build
 
 FROM node:20-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
+ENV HOSTNAME=0.0.0.0
+# Runtime proxy target for /gw/*; set per environment (not baked into the image).
+ENV GATEWAY_URL=http://api-gateway:8005
 COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static
 

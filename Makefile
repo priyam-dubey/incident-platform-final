@@ -1,4 +1,4 @@
-.PHONY: test-node-sdk test-e2e test-gateway run-gateway test-llm infra-up infra-down infra-logs migrate migrate-status test-db test-schemas test-redaction test-ingestion test-correlation test-reasoning test-alerts test-all run-ingestion run-correlation run-reasoning run-alerts run-dashboard
+.PHONY: test-scanner test-ui-e2e run-scan-worker test-node-sdk test-e2e test-gateway run-gateway test-llm infra-up infra-down infra-logs migrate migrate-status test-db test-schemas test-redaction test-ingestion test-correlation test-reasoning test-alerts test-all run-ingestion run-correlation run-reasoning run-alerts run-dashboard
 
 infra-up:
 	docker compose -f infra/docker/docker-compose.yml up -d
@@ -68,3 +68,12 @@ run-gateway:
 
 test-node-sdk:
 	cd packages/node-sdk && npm test
+
+test-scanner:
+	cd packages/scanner && pytest -v
+
+test-ui-e2e:
+	python tests/e2e/ui/run_ui_e2e.py
+
+run-scan-worker:
+	cd apps/api-gateway && python -m app.scan_worker
