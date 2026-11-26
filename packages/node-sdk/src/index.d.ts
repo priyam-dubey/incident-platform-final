@@ -20,3 +20,18 @@ export const logger: {
   warn(message: string, attributes?: Record<string, unknown>): void;
   error(message: string, attributes?: Record<string, unknown>): void;
 };
+export interface DeploymentOptions {
+  key?: string;            // defaults to INCIDENT_PLATFORM_KEY
+  apiUrl?: string;         // defaults to INCIDENT_PLATFORM_API_URL, then the ingestion endpoint
+  version?: string;        // defaults to INCIDENT_PLATFORM_RELEASE
+  commitSha?: string;      // defaults to INCIDENT_PLATFORM_COMMIT
+  branch?: string;
+  repository?: string;     // owner/name
+  deployedBy?: string;
+  deployedAt?: string | Date;
+  environment?: string;
+  metadata?: Record<string, unknown>;
+  timeoutMs?: number;
+}
+/** Never throws. Deployments are shown as possible causes, never as proof. */
+export function registerDeployment(options?: DeploymentOptions): Promise<{ ok: boolean; status?: number; id?: string; error?: string }>;
