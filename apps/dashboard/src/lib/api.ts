@@ -1,73 +1,71 @@
-/**
- * Server-side client for the alert-router API. Every function here runs
- * only on the server (in a Server Component or Route Handler) - the API key
- * that authenticates the dashboard as a trusted machine client never
- * reaches the browser. Client components that need to trigger a write (the
- * verdict buttons) call this app's own /api/* route handlers instead, which
- * proxy through here.
- */
+/** Browser API client. Access token lives in memory only; the refresh token is an httpOnly cookie. */
 
-import { IncidentDetail, IncidentStatus, IncidentSummary, Verdict } from "./types";
-
-const ALERT_ROUTER_URL = process.env.ALERT_ROUTER_URL ?? "http://localhost:8004";
-const ALERT_ROUTER_API_KEY = process.env.ALERT_ROUTER_API_KEY ?? "dev-local-dashboard-key";
-
-class ApiError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-  ) {
+export class ApiError extends Error {
+  constructor(public status: number, public code: string | null, message: string, public detail?: unknown) {
     super(message);
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${ALERT_ROUTER_URL}${path}`, {
-    ...init,
-    headers: {
-      "X-API-Key": ALERT_ROUTER_API_KEY,
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {}),
-    },
-    // Incident state changes constantly - never let Next.js cache these.
-    cache: "no-store",
-  });
+let accessToken: string | null = null;
+let refreshing: Promise<boolean> | null = null;
+let onAuthLost: (() => void) | null = null;
+export const setOnAuthLost = (fn: (() => void) | null) => { onAuthLost = fn; };
+export const setAccessToken = (t: string | null) => { accessToken = t; };
 
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    throw new ApiError(response.status, `${path} -> ${response.status}: ${body}`);
+const BASE = "/gw";
+const CSRF = { "X-Requested-With": "incident-platform" };
+
+function parseError(status: number, body: unknown): ApiError {
+  const d = (body as { detail?: unknown })?.detail;
+  if (typeof d === "string") return new ApiError(status, null, d);
+  if (Array.isArray(d)) return new ApiError(status, null, d.map((e: { msg?: string }) => e.msg).filter(Boolean).join("; ") || "Invalid request", d);
+  if (d && typeof d === "object") {
+    const o = d as { code?: string; message?: string };
+    return new ApiError(status, o.code ?? null, o.message ?? "Request failed", d);
   }
-
-  return response.json() as Promise<T>;
+  return new ApiError(status, null, status === 502 ? "The API is not reachable." : `Request failed (${status})`);
 }
 
-export async function listIncidents(
-  workspaceId: string,
-  statusFilter?: IncidentStatus,
-): Promise<IncidentSummary[]> {
-  const params = new URLSearchParams({ workspace_id: workspaceId });
-  if (statusFilter) params.set("status_filter", statusFilter);
-  return request<IncidentSummary[]>(`/v1/incidents?${params.toString()}`);
+export async function refreshSession(): Promise<boolean> {
+  refreshing ??= (async () => {
+    try {
+      const r = await fetch(`${BASE}/v1/auth/refresh`, { method: "POST", headers: CSRF, credentials: "same-origin" });
+      if (!r.ok) return false;
+      const j = await r.json();
+      accessToken = j.access_token;
+      return true;
+    } catch { return false; } finally { setTimeout(() => { refreshing = null; }, 0); }
+  })();
+  return refreshing;
 }
 
-export async function getIncidentDetail(incidentId: string): Promise<IncidentDetail | null> {
-  try {
-    return await request<IncidentDetail>(`/v1/incidents/${incidentId}`);
-  } catch (err) {
-    if (err instanceof ApiError && err.status === 404) return null;
-    throw err;
+export async function api<T = unknown>(path: string, init: RequestInit & { json?: unknown; raw?: boolean } = {}, retry = true): Promise<T> {
+  const headers: Record<string, string> = { ...CSRF, ...(init.headers as Record<string, string> | undefined) };
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+  if (init.json !== undefined) { headers["Content-Type"] = "application/json"; init = { ...init, body: JSON.stringify(init.json) }; }
+  const r = await fetch(`${BASE}${path}`, { ...init, headers, credentials: "same-origin", cache: "no-store" });
+  if (r.status === 401 && retry && !path.startsWith("/v1/auth/")) {
+    if (await refreshSession()) return api<T>(path, init, false);
+    onAuthLost?.();
   }
+  if (!r.ok) throw parseError(r.status, await r.json().catch(() => null));
+  if (init.raw) return r as unknown as T;
+  if (r.status === 204) return undefined as T;
+  return r.json();
 }
 
-export async function submitVerdict(
-  hypothesisId: string,
-  verdict: Verdict,
-  notes: string | undefined,
-  reviewerEmail: string,
-): Promise<{ hypothesis: unknown; incident_status: IncidentStatus }> {
-  return request(`/v1/hypotheses/${hypothesisId}/verdict`, {
-    method: "POST",
-    headers: { "X-Reviewer-Email": reviewerEmail },
-    body: JSON.stringify({ verdict, notes }),
-  });
+export async function download(path: string, fallbackName: string): Promise<void> {
+  const r = await api<Response>(path, { raw: true });
+  const blob = await r.blob();
+  const name = /filename="([^"]+)"/.exec(r.headers.get("content-disposition") ?? "")?.[1] ?? fallbackName;
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
+
+export const qs = (o: Record<string, string | number | boolean | null | undefined>) => {
+  const p = new URLSearchParams();
+  Object.entries(o).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== "") p.set(k, String(v)); });
+  const s = p.toString();
+  return s ? `?${s}` : "";
+};

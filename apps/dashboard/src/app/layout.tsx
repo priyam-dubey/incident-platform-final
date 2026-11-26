@@ -1,31 +1,29 @@
 import type { Metadata } from "next";
-import { Space_Grotesk, Inter, JetBrains_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
-const display = Space_Grotesk({
-  subsets: ["latin"],
-  variable: "--font-display",
+const inter = localFont({
+  src: [
+    { path: "../fonts/Inter-Regular.woff2", weight: "400", style: "normal" },
+    { path: "../fonts/Inter-Medium.woff2", weight: "500", style: "normal" },
+    { path: "../fonts/Inter-SemiBold.woff2", weight: "600", style: "normal" },
+  ],
+  variable: "--font-inter",
   display: "swap",
 });
-const body = Inter({ subsets: ["latin"], variable: "--font-body", display: "swap" });
-const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono", display: "swap" });
 
 export const metadata: Metadata = {
-  title: "Incident Intelligence",
-  description: "AI-native observability and incident intelligence platform",
+  title: { default: "Incident Platform", template: "%s · Incident Platform" },
+  description: "Code intelligence and runtime monitoring in one place: scan repositories, watch live applications, and investigate incidents with evidence.",
 };
+
+const themeScript = `try{var t=localStorage.getItem("theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${display.variable} ${body.variable} ${mono.variable}`}>
-      <body className="min-h-screen bg-void text-primary">
-        <header className="border-b border-hairline px-6 py-4">
-          <a href="/" className="font-display text-lg font-medium tracking-tight">
-            INCIDENT<span className="text-ai">/</span>INTELLIGENCE
-          </a>
-        </header>
-        <main>{children}</main>
-      </body>
+    <html lang="en" className={inter.variable} suppressHydrationWarning>
+      <head><script dangerouslySetInnerHTML={{ __html: themeScript }} /></head>
+      <body className="min-h-screen font-sans antialiased">{children}</body>
     </html>
   );
 }

@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from redaction import redact
+
 from incident_schemas.clickhouse_ddl import TELEMETRY_TABLE as T
 
 # A "request" is an HTTP SERVER span (span_kind 2) that carries a response status.
@@ -252,7 +254,8 @@ def public_attrs(raw: str | None) -> dict:
 
 def shape_logs(rows: list[dict]) -> list[dict]:
     return [{
-        "timestamp": _iso(r["timestamp"]), "severity": r["severity"], "message": (r["message"] or "")[:8000],
+        "timestamp": _iso(r["timestamp"]), "severity": r["severity"], "message": redact(r["message"] or "").text[:8000],  # read-time redaction: defence in depth
+       
         "trace_id": r["trace_id"] or None, "span_id": r["span_id"] or None, "attributes": public_attrs(r.get("attributes")),
     } for r in rows]
 
